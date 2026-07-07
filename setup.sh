@@ -21,12 +21,20 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Создание глобального алиаса rw-installer
+create_alias() {
+    if [ ! -L /usr/local/bin/rw-installer ] && [ ! -f /usr/local/bin/rw-installer ]; then
+        ln -s "$(readlink -f "$0")" /usr/local/bin/rw-installer 2>/dev/null
+        echo -e "${GREEN}✅ Создан глобальный алиас: теперь можно запускать командой ${BOLD}rw-installer${NC}${GREEN} из любой директории.${NC}"
+    fi
+}
+
 # Логотип
 show_logo() {
     clear
     echo -e "${CYAN}${BOLD}"
     echo "  ╔════════════════════════════════════════════════════╗"
-    echo "  ║   ⚡ Just Remnawave Auto Installer by tneangel ⚡   ║"
+    echo "  ║   ⚡ Just Remnawave Auto Installer by tneangel    ║"
     echo "  ╚════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -78,7 +86,7 @@ install_panel() {
     sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$pw/" .env
     sed -i "s|^\(DATABASE_URL=\"postgresql://postgres:\)[^\@]*\(@.*\)|\1$pw\2|" .env
 
-    echo -e "${YELLOW}🌐 Шаг 3. Настраиваем домены...${NC}"
+    echo -e "${YELLOW} Шаг 3. Настраиваем домены...${NC}"
     sed -i "s|^FRONT_END_DOMAIN=.*|FRONT_END_DOMAIN=$PANEL_DOMAIN|" .env
     sed -i "s|^SUB_PUBLIC_DOMAIN=.*|SUB_PUBLIC_DOMAIN=$SUB_DOMAIN|" .env
 
@@ -140,7 +148,7 @@ EOF
     if [ -z "$API_TOKEN" ]; then
         echo -e "${RED}❌ Токен не введён. Страница подписки не будет установлена.${NC}"
     else
-        echo -e "\n${YELLOW}📄 Шаг 6. Устанавливаем страницу подписки...${NC}"
+        echo -e "\n${YELLOW} Шаг 6. Устанавливаем страницу подписки...${NC}"
         mkdir -p /opt/remnawave/subscription && cd /opt/remnawave/subscription
 
         cat > .env <<EOF
@@ -171,15 +179,14 @@ EOF
         docker compose up -d
         echo -e "${GREEN}✅ Страница подписки запущена.${NC}"
 
-        echo -e "${YELLOW}🔄 Шаг 7. Добавляем домен подписки в Caddy...${NC}"
+        echo -e "${YELLOW} Шаг 7. Добавляем домен подписки в Caddy...${NC}"
         cd /opt/remnawave/caddy
+        
+        # Проверяем, есть ли уже этот домен, чтобы не дублировать
         if ! grep -q "$SUB_DOMAIN" Caddyfile; then
-            cat >> Caddyfile <<EOF
-
-https://$SUB_DOMAIN {
-    reverse_proxy * http://remnawave-subscription-page:3010
-}
-EOF
+            # Добавляем 4 пустые строки и блок подписки (как на скриншоте)
+            printf '\n\n\n\nhttps://%s {\n    reverse_proxy * http://remnawave-subscription-page:3010\n}\n' "$SUB_DOMAIN" >> Caddyfile
+            
             docker compose down && docker compose up -d
             echo -e "${GREEN}✅ Caddy обновлён.${NC}"
         fi
@@ -239,10 +246,29 @@ EOF
 
     echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}${BOLD}║         ✅ НОДА УСТАНОВЛЕНА! 🎉                   ║${NC}"
-    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════╝${NC}"
     echo -e "${YELLOW}⚠️  ВАЖНО: Закройте порт ${BOLD}$NODE_PORT${NC}${YELLOW} в фаерволе ноды"
     echo -e "   для всех, КРОМЕ IP-адреса основной панели!${NC}"
     echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 3: СОЦСЕТИ И ДОНАТЫ
+# ============================================
+show_socials() {
+    show_logo
+    echo -e "${CYAN}${BOLD}💬 Сообщество и Контакты:${NC}\n"
+    echo -e "  👨💻 Автор:       ${BOLD}https://t.me/tneangel${NC}"
+    echo -e "  📢 Канал:       ${BOLD}https://t.me/tneangelrw${NC}"
+    echo -e "  💬 Чат:         ${BOLD}https://t.me/tneangelchat${NC}"
+    
+    echo -e "\n${YELLOW}${BOLD}💖 Поддержать проект:${NC}"
+    echo -e "  ₿ BTC (Bitcoin):      ${BOLD}1JJbWBTJgVu4YxU7DfDtqQeSCuY7HuvXgL${NC}"
+    echo -e "   USDT (TRC-20):     ${BOLD}TPotMhpBC4pd5rFEGfdkBw2uSPXVixqZuj${NC}"
+    echo -e "  💶 USDT (ERC-20):     ${BOLD}0x9e0667619271d40974e844cfe6e1d7e9a7903be0${NC}"
+    
+    echo -e "\n${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
     read -p "Нажмите Enter для возврата в меню..."
 }
 
@@ -251,9 +277,12 @@ EOF
 # ============================================
 while true; do
     show_logo
+    create_alias
+    
     echo -e "${BOLD}Выберите действие:${NC}"
-    echo -e "  ${CYAN}1)${NC} 🚀 Установить Панель + Страницу подписки"
+    echo -e "  ${CYAN}1)${NC}  Установить Панель + Страницу подписки"
     echo -e "  ${CYAN}2)${NC} 🖥️  Установить Ноду (на отдельный сервер)"
+    echo -e "  ${CYAN}9)${NC} 💬 Соцсети и Донаты"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     echo ""
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
@@ -261,6 +290,7 @@ while true; do
     case $choice in
         1) install_panel ;;
         2) install_node ;;
+        9) show_socials ;;
         0)
             echo -e "${GREEN}👋 До свидания!${NC}"
             exit 0
