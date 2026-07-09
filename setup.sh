@@ -100,14 +100,13 @@ install_panel() {
     echo -e "\n${YELLOW}🔧 Шаг 5. Настраиваем Caddy (HTTPS)...${NC}"
     mkdir -p /opt/remnawave/caddy && cd /opt/remnawave/caddy
 
+    # Создаём Caddyfile в новом формате с комментариями
     cat > Caddyfile <<EOF
+# ==================
+# Web panel
+# ==================
 https://$PANEL_DOMAIN {
-    reverse_proxy * http://remnawave:3000
-}
-
-:443 {
-    tls internal
-    respond 204
+        reverse_proxy * http://remnawave:3000
 }
 EOF
 
@@ -186,8 +185,16 @@ EOF
         
         # Проверяем, есть ли уже этот домен, чтобы не дублировать
         if ! grep -q "$SUB_DOMAIN" Caddyfile; then
-            # Добавляем 4 пустые строки и блок подписки
-            printf '\n\n\n\nhttps://%s {\n    reverse_proxy * http://remnawave-subscription-page:3010\n}\n' "$SUB_DOMAIN" >> Caddyfile
+            # Добавляем блок подписки в новом формате с комментариями
+            cat >> Caddyfile <<EOF
+
+# ==================
+# Subscription Page
+# ==================
+https://$SUB_DOMAIN {
+        reverse_proxy * http://remnawave-subscription-page:3010
+}
+EOF
             
             docker compose down && docker compose up -d
             echo -e "${GREEN}✅ Caddy обновлён.${NC}"
