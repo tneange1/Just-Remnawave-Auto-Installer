@@ -256,6 +256,104 @@ EOF
 }
 
 # ============================================
+# ОПЦИЯ 3: ОБНОВЛЕНИЕ КОМПОНЕНТОВ
+# ============================================
+update_components() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление компонентов Remnawave${NC}\n"
+    
+    echo -e "${BOLD}Что хотите обновить?${NC}"
+    echo -e "  ${CYAN}1)${NC} 🚀 Обновить Панель + Страницу подписки"
+    echo -e "  ${CYAN}2)${NC} 🖥️  Обновить Ноду"
+    echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+    echo ""
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" update_choice
+
+    case $update_choice in
+        1)
+            update_panel
+            ;;
+        2)
+            update_node
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo -e "${RED}❌ Неверный выбор.${NC}"
+            sleep 2
+            ;;
+    esac
+}
+
+# Обновление панели и страницы подписки
+update_panel() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Remnawave Panel + Subscription Page${NC}\n"
+
+    if [ ! -d "/opt/remnawave" ]; then
+        echo -e "${RED}❌ Ошибка: Папка /opt/remnawave не найдена. Сначала установите панель.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    echo -e "${YELLOW}📥 Обновляем основную панель...${NC}"
+    cd /opt/remnawave
+    docker compose pull
+    docker compose down
+    docker compose up -d
+    echo -e "${GREEN}✅ Панель обновлена и запущена.${NC}"
+
+    echo -e "\n${YELLOW}📄 Обновляем страницу подписки...${NC}"
+    if [ -d "/opt/remnawave/subscription" ]; then
+        cd /opt/remnawave/subscription
+        docker compose pull
+        docker compose down
+        docker compose up -d
+        echo -e "${GREEN}✅ Страница подписки обновлена и запущена.${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Страница подписки не установлена. Пропускаем.${NC}"
+    fi
+
+    echo -e "\n${YELLOW}🧹 Очищаем неиспользуемые образы...${NC}"
+    docker image prune -f
+    echo -e "${GREEN}✅ Очистка завершена.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║        ✅ ОБНОВЛЕНИЕ ПАНЕЛИ ЗАВЕРШЕНО! 🎉         ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# Обновление ноды
+update_node() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Remnawave Node${NC}\n"
+
+    if [ ! -d "/opt/remnanode" ]; then
+        echo -e "${RED}❌ Ошибка: Папка /opt/remnanode не найдена. Сначала установите ноду.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    echo -e "${YELLOW}📥 Обновляем ноду...${NC}"
+    cd /opt/remnanode
+    docker compose pull
+    docker compose down
+    docker compose up -d
+    echo -e "${GREEN}✅ Нода обновлена и запущена.${NC}"
+
+    echo -e "\n${YELLOW}🧹 Очищаем неиспользуемые образы...${NC}"
+    docker image prune -f
+    echo -e "${GREEN}✅ Очистка завершена.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║         ✅ ОБНОВЛЕНИЕ НОДЫ ЗАВЕРШЕНО! 🎉          ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
 # ГЛАВНОЕ МЕНЮ
 # ============================================
 while true; do
@@ -265,6 +363,7 @@ while true; do
     echo -e "${BOLD}Выберите действие:${NC}"
     echo -e "  ${CYAN}1)${NC} 🚀 Установить Панель + Страницу подписки"
     echo -e "  ${CYAN}2)${NC} 🖥️  Установить Ноду (на отдельный сервер)"
+    echo -e "  ${CYAN}3)${NC} 🔄 Обновить компоненты"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     echo ""
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
@@ -272,6 +371,7 @@ while true; do
     case $choice in
         1) install_panel ;;
         2) install_node ;;
+        3) update_components ;;
         0)
             echo -e "${GREEN}👋 До свидания!${NC}"
             exit 0
