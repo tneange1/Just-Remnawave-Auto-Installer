@@ -9,7 +9,7 @@
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-orange.svg)](https://www.gnu.org/software/bash/)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 
-[🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-использование) • [💖 Поддержать](#-поддержать-проект) • [💬 Сообщество](#-сообщество-и-контакты)
+[🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-использование) • [💖 Поддержать](#-поддержать-проект) • [💬 Сообщество](#-сообщество)
 
 </div>
 
@@ -42,5 +42,4 @@
 Просто выполни одну команду на сервере:
 
 ```bash
-curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh -o setup.sh
-sudo bash setup.sh
+bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
