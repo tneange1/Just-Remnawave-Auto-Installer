@@ -383,8 +383,28 @@ update_node() {
 }
 
 # ============================================
-# ОПЦИЯ 2: BEDOLAGA BOT
+# ОПЦИЯ 2: BEDOLAGA (Bot + MiniAPP)
 # ============================================
+show_bedolaga_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}💰 Bedolaga (Bot + MiniAPP)${NC}\n"
+        echo -e "  ${CYAN}1)${NC} Установить Bedolaga Bot"
+        echo -e "  ${CYAN}2)${NC} Установить MiniAPP (Cabinet)"
+        echo -e "  ${CYAN}3)${NC} Обновить компоненты"
+        echo -e "  ${CYAN}0)${NC} Назад"
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
+
+        case $choice in
+            1) install_bedolaga ;;
+            2) install_cabinet ;;
+            3) update_bedolaga ;;
+            0) break ;;
+            *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
 install_bedolaga() {
     show_logo
     echo -e "${BLUE}${BOLD}💰 Установка Bedolaga Bot${NC}\n"
@@ -400,14 +420,14 @@ install_bedolaga() {
         REMNAWAVE_API_URL="http://remnawave:3000"
         echo -e "${GREEN}✅ Используется внутренний адрес: $REMNAWAVE_API_URL${NC}"
     else
-        read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_DOMAIN
+        read -p "🌐 Введите домен панели Remnawave: " PANEL_DOMAIN
         REMNAWAVE_API_URL="https://$PANEL_DOMAIN"
     fi
 
     read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
     read -p "👤 ADMIN_IDS (Telegram ID через запятую): " ADMIN_IDS
     read -p "🔑 REMNAWAVE_API_KEY (API ключ из панели): " REMNAWAVE_API_KEY
-    read -p "🌐 Домен для бота (например bedolaga.myvpn.com): " BEDOLAGA_DOMAIN
+    read -p "🌐 Домен для бота: " BEDOLAGA_DOMAIN
 
     POSTGRES_PASSWORD=$(openssl rand -hex 24)
     WEBHOOK_SECRET_TOKEN=$(openssl rand -hex 32)
@@ -449,7 +469,6 @@ EOF
     docker network create remnawave_bot_network 2>/dev/null || true
 
     if [[ "$server_location" == "1" ]]; then
-        echo -e "${YELLOW}📥 Используем docker-compose.local.yml (тот же сервер)...${NC}"
         if [ -f "docker-compose.local.yml" ]; then
             rm -f docker-compose.yml
             mv docker-compose.local.yml docker-compose.yml
@@ -458,7 +477,6 @@ EOF
 
     docker compose up -d
 
-    # Настройка Caddy
     if [[ "$server_location" == "1" ]]; then
         BEDOLAGA_BLOCK="https://$BEDOLAGA_DOMAIN {
     encode gzip zstd
@@ -476,52 +494,106 @@ EOF
         
         cd /opt/remnawave/caddy
         docker compose down && docker compose up -d
-    else
-        # Отдельный сервер
-        mkdir -p /opt/bedolaga-caddy && cd /opt/bedolaga-caddy
-        cat > Caddyfile <<EOF
-https://$BEDOLAGA_DOMAIN {
-    encode gzip zstd
-    handle {
-        reverse_proxy remnawave_bot:8080 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            transport http {
-                read_buffer 0
-            }
-        }
-    }
-}
-EOF
-        cat > docker-compose.yml <<EOF
-services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: remnawave_caddy
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - bot_network
-volumes:
-  caddy_data:
-  caddy_config:
-networks:
-  bot_network:
-    name: remnawave_bot_network
-    external: true
-EOF
-        docker compose up -d
     fi
 
-    echo -e "${GREEN}✅ Bedolaga Bot успешно установлен!${NC}"
+    echo -e "${GREEN}✅ Bedolaga Bot установлен!${NC}"
     echo -e "🌐 Бот: https://$BEDOLAGA_DOMAIN\n"
-    read -p "Нажмите Enter для возврата в меню..."
+    read -p "Нажмите Enter..."
+}
+
+install_cabinet() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🗄️  Установка MiniAPP (Cabinet)${NC}\n"
+
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Сначала установите Bedolaga Bot!${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+
+    read -p "🌐 Домен для Cabinet (например cabinet.myvpn.com): " CABINET_DOMAIN
+    CABINET_JWT_SECRET=$(openssl rand -hex 32)
+
+    cd /opt/bedolaga-bot
+    if ! grep -q "CABINET_ENABLED=true" .env; then
+        cat >> .env <<EOF
+
+# Bedolaga Cabinet
+CABINET_ENABLED=true
+CABINET_JWT_SECRET=$CABINET_JWT_SECRET
+CABINET_ALLOWED_ORIGINS=https://$CABINET_DOMAIN
+CABINET_URL=https://$CABINET_DOMAIN
+EOF
+        echo -e "${GREEN}✅ Настройки Cabinet добавлены в .env${NC}"
+    fi
+
+    echo -e "${YELLOW}📥 Получаем frontend файлы Cabinet...${NC}"
+    docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+    docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+    rm -rf ./cabinet-dist
+    docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
+    docker rm tmp_cabinet
+
+    mkdir -p /srv/cabinet
+    cp -r ./cabinet-dist/* /srv/cabinet/
+
+    docker compose down
+    docker compose up -d
+
+    # Подключение Caddy
+    BOT_NETWORK=$(docker inspect remnawave_bot -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | tr -d ' ')
+    if [ -n "$BOT_NETWORK" ]; then
+        docker network connect "$BOT_NETWORK" caddy 2>/dev/null || true
+    fi
+
+    CABINET_BLOCK="https://$CABINET_DOMAIN {
+    encode gzip zstd
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy remnawave_bot:8080
+    }
+    handle {
+        reverse_proxy cabinet_frontend:80
+    }
+}"
+    add_caddy_block "$CABINET_DOMAIN" "$CABINET_BLOCK"
+    
+    cd /opt/remnawave/caddy
+    docker compose down && docker compose up -d
+
+    echo -e "${GREEN}✅ MiniAPP (Cabinet) установлен!${NC}"
+    echo -e "🗄️  Cabinet: https://$CABINET_DOMAIN\n"
+    read -p "Нажмите Enter..."
+}
+
+update_bedolaga() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Bedolaga компонентов${NC}\n"
+
+    if [ -d "/opt/bedolaga-bot" ]; then
+        echo -e "${YELLOW}Обновляем Bedolaga Bot...${NC}"
+        cd /opt/bedolaga-bot
+        git pull origin main
+        docker compose down
+        docker compose up -d --build
+    fi
+
+    if [ -d "/opt/bedolaga-bot" ]; then
+        echo -e "${YELLOW}Обновляем Cabinet...${NC}"
+        cd /opt/bedolaga-bot
+        docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+        docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+        rm -rf ./cabinet-dist
+        docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
+        docker rm tmp_cabinet
+        rm -rf /srv/cabinet/*
+        cp -r ./cabinet-dist/* /srv/cabinet/
+        docker restart cabinet_frontend 2>/dev/null || true
+    fi
+
+    docker image prune -f
+    echo -e "${GREEN}✅ Компоненты Bedolaga обновлены!${NC}\n"
+    read -p "Нажмите Enter..."
 }
 
 # ============================================
@@ -533,7 +605,7 @@ install_warp() {
 
     install_docker
 
-    echo -e "${YELLOW}📥 Запускаем официальный скрипт установки warp-native...${NC}"
+    echo -e "${YELLOW}📥 Запускаем официальный скрипт установки...${NC}"
     bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
     
     echo -e "${GREEN}✅ WARP успешно установлен!${NC}\n"
@@ -544,7 +616,7 @@ uninstall_warp() {
     show_logo
     echo -e "${BLUE}${BOLD}🗑️  Удаление Cloudflare WARP${NC}\n"
 
-    echo -e "${YELLOW}📥 Запускаем официальный скрипт удаления...${NC}"
+    echo -e "${YELLOW}📥 Запускаем скрипт удаления...${NC}"
     bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/uninstall.sh) || true
     
     echo -e "${GREEN}✅ WARP успешно удалён.${NC}\n"
@@ -622,7 +694,7 @@ show_subscription_logs() {
 }
 
 # ============================================
-# ПОДМЕНЮ
+# ПОДМЕНЮ REMNAWAVE
 # ============================================
 show_remnawave_menu() {
     while true; do
@@ -671,7 +743,7 @@ while true; do
     
     echo -e "${BOLD}Выберите раздел:${NC}"
     echo -e "  ${CYAN}1)${NC} 🚀 Remnawave (Panel + Node)"
-    echo -e "  ${CYAN}2)${NC} 💰 Bedolaga Bot"
+    echo -e "  ${CYAN}2)${NC} 💰 Bedolaga (Bot + MiniAPP)"
     echo -e "  ${CYAN}3)${NC} 🌐 Cloudflare WARP"
     echo -e "  ${CYAN}4)${NC} 💾 Бэкапы"
     echo -e "  ${CYAN}5)${NC} 📋 Логи"
@@ -681,7 +753,7 @@ while true; do
 
     case $main_choice in
         1) show_remnawave_menu ;;
-        2) install_bedolaga ;;
+        2) show_bedolaga_menu ;;
         3) show_warp_menu ;;
         4) run_backup ;;
         5) show_logs_menu ;;
