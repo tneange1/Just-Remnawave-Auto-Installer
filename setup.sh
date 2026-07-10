@@ -469,7 +469,6 @@ EOF
     docker network create remnawave_bot_network 2>/dev/null || true
 
     if [[ "$server_location" == "1" ]]; then
-        echo -e "${YELLOW}📥 Используем docker-compose.local.yml (тот же сервер)...${NC}"
         if [ -f "docker-compose.local.yml" ]; then
             rm -f docker-compose.yml
             mv docker-compose.local.yml docker-compose.yml
@@ -515,7 +514,7 @@ install_cabinet() {
     read -p "🌐 Домен для Cabinet (например cabinet.myvpn.com): " CABINET_DOMAIN
     CABINET_JWT_SECRET=$(openssl rand -hex 32)
 
-    # Добавляем настройки в .env бота
+    # Добавляем настройки Cabinet в .env бота
     cd /opt/bedolaga-bot
     if ! grep -q "CABINET_ENABLED=true" .env; then
         cat >> .env <<EOF
@@ -526,12 +525,21 @@ CABINET_JWT_SECRET=$CABINET_JWT_SECRET
 CABINET_ALLOWED_ORIGINS=https://$CABINET_DOMAIN
 CABINET_URL=https://$CABINET_DOMAIN
 EOF
+        echo -e "${GREEN}✅ Настройки Cabinet добавлены в .env бота${NC}"
     fi
 
-    echo -e "${YELLOW}📥 Клонируем Cabinet...${NC}"
+    echo -e "${YELLOW}📥 Клонируем и устанавливаем Cabinet...${NC}"
     cd /opt
     git clone https://github.com/BEDOLAGA-DEV/bedolaga-cabinet.git
     cd bedolaga-cabinet
+
+    # Создаём .env для Cabinet
+    cat > .env <<EOF
+VITE_API_URL=/api
+VITE_TELEGRAM_BOT_USERNAME=your_bot_username
+VITE_APP_NAME=My VPN
+VITE_APP_LOGO=V
+EOF
 
     echo -e "${YELLOW}📥 Получаем frontend файлы...${NC}"
     docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
@@ -559,14 +567,11 @@ EOF
     cd /opt/remnawave/caddy
     docker compose down && docker compose up -d
 
-    # Подключение сети
-    BOT_NETWORK=$(docker inspect remnawave_bot -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | tr -d ' ')
-    if [ -n "$BOT_NETWORK" ]; then
-        docker network connect "$BOT_NETWORK" caddy 2>/dev/null || true
-        echo -e "${GREEN}✅ Caddy подключён к сети бота${NC}"
-    fi
+    # Запуск контейнера Cabinet
+    cd /opt/bedolaga-cabinet
+    docker run -d --name cabinet_frontend --network remnawave_bot_network -v /srv/cabinet:/usr/share/nginx/html nginx:alpine
 
-    echo -e "${GREEN}✅ MiniAPP (Cabinet) установлен!${NC}"
+    echo -e "${GREEN}✅ MiniAPP (Cabinet) успешно установлен!${NC}"
     echo -e "🗄️  Cabinet: https://$CABINET_DOMAIN\n"
     read -p "Нажмите Enter для возврата в меню..."
 }
@@ -583,10 +588,9 @@ update_bedolaga() {
         docker compose up -d --build
     fi
 
-    echo -e "${YELLOW}Обновляем Cabinet...${NC}"
-    cd /opt
-    if [ -d "bedolaga-cabinet" ]; then
-        cd bedolaga-cabinet
+    if [ -d "/opt/bedolaga-cabinet" ]; then
+        echo -e "${YELLOW}Обновляем Cabinet...${NC}"
+        cd /opt/bedolaga-cabinet
         docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
         docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
         rm -rf ./cabinet-dist
