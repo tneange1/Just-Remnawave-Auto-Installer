@@ -512,9 +512,12 @@ install_cabinet() {
     fi
 
     read -p "🌐 Домен для Cabinet (например cabinet.myvpn.com): " CABINET_DOMAIN
+    read -p "📱 Telegram Bot Username (без @): " BOT_USERNAME
+    read -p "🏷️  Название приложения: " APP_NAME
+
     CABINET_JWT_SECRET=$(openssl rand -hex 32)
 
-    # Добавляем настройки Cabinet в .env бота
+    # Добавляем настройки в .env бота
     cd /opt/bedolaga-bot
     if ! grep -q "CABINET_ENABLED=true" .env; then
         cat >> .env <<EOF
@@ -525,25 +528,26 @@ CABINET_JWT_SECRET=$CABINET_JWT_SECRET
 CABINET_ALLOWED_ORIGINS=https://$CABINET_DOMAIN
 CABINET_URL=https://$CABINET_DOMAIN
 EOF
-        echo -e "${GREEN}✅ Настройки Cabinet добавлены в .env бота${NC}"
     fi
 
-    echo -e "${YELLOW}📥 Клонируем и устанавливаем Cabinet...${NC}"
+    echo -e "${YELLOW}📥 Клонируем Cabinet...${NC}"
     cd /opt
     git clone https://github.com/BEDOLAGA-DEV/bedolaga-cabinet.git
     cd bedolaga-cabinet
 
-    # Создаём .env для Cabinet
+    echo -e "${YELLOW}📝 Создаём .env для Cabinet...${NC}"
     cat > .env <<EOF
 VITE_API_URL=/api
-VITE_TELEGRAM_BOT_USERNAME=your_bot_username
-VITE_APP_NAME=My VPN
+VITE_TELEGRAM_BOT_USERNAME=$BOT_USERNAME
+VITE_APP_NAME=$APP_NAME
 VITE_APP_LOGO=V
 EOF
 
-    echo -e "${YELLOW}📥 Получаем frontend файлы...${NC}"
-    docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
-    docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+    echo -e "${YELLOW}📥 Собираем Cabinet...${NC}"
+    docker compose build
+
+    echo -e "${YELLOW}📥 Копируем файлы...${NC}"
+    docker create --name tmp_cabinet cabinet_frontend
     rm -rf ./cabinet-dist
     docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
     docker rm tmp_cabinet
@@ -569,7 +573,11 @@ EOF
 
     # Запуск контейнера Cabinet
     cd /opt/bedolaga-cabinet
-    docker run -d --name cabinet_frontend --network remnawave_bot_network -v /srv/cabinet:/usr/share/nginx/html nginx:alpine
+    docker compose up -d
+
+    # Подключение сети
+    echo -e "${YELLOW}🔗 Подключаем Cabinet к сети Caddy...${NC}"
+    docker network connect bedolaga-cabinet_default caddy 2>/dev/null || true
 
     echo -e "${GREEN}✅ MiniAPP (Cabinet) успешно установлен!${NC}"
     echo -e "🗄️  Cabinet: https://$CABINET_DOMAIN\n"
@@ -591,13 +599,8 @@ update_bedolaga() {
     if [ -d "/opt/bedolaga-cabinet" ]; then
         echo -e "${YELLOW}Обновляем Cabinet...${NC}"
         cd /opt/bedolaga-cabinet
-        docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
-        docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
-        rm -rf ./cabinet-dist
-        docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
-        docker rm tmp_cabinet
-        rm -rf /srv/cabinet/*
-        cp -r ./cabinet-dist/* /srv/cabinet/
+        docker compose build
+        docker compose up -d
     fi
 
     docker image prune -f
