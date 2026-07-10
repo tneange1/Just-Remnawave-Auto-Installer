@@ -130,6 +130,6 @@ rw-installer
 
 **⭐ Поставь звезду репозиторию, если скрипт был полезен!**
 
-Сделано с ❤️ by [tneangel](https://t.me/tneangel)
+Сделано с ❤️ by [tneangel](https://t.me/tneangel)&[Qwen](https://qwen.ai/)
 
 </div>
