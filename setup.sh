@@ -971,6 +971,258 @@ uninstall_warp() {
 }
 
 # ============================================
+# ОПЦИЯ 3.1: УСТАНОВКА REMNAWAVE ADMIN WEB + BOT
+# ============================================
+install_admin_bot() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🤖 Установка Remnawave Admin Web + Bot${NC}\n"
+
+    install_docker
+
+    # Вопрос о месте установки
+    echo -e "${YELLOW}Где устанавливается бот?${NC}"
+    echo -e "  ${CYAN}1)${NC} На том же сервере, где и панель Remnawave"
+    echo -e "  ${CYAN}2)${NC} На отдельном сервере"
+    echo ""
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" server_location
+
+    if [[ "$server_location" == "1" ]]; then
+        API_BASE_URL="http://remnawave:3000"
+        SAME_SERVER=true
+    else
+        read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_URL
+        API_BASE_URL="https://$PANEL_URL"
+        SAME_SERVER=false
+    fi
+
+    # Запрос обязательных данных
+    echo -e "\n${YELLOW}📥 Введите данные для настройки:${NC}\n"
+    
+    read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
+    if [ -z "$BOT_TOKEN" ]; then
+        echo -e "${RED}❌ Ошибка: BOT_TOKEN не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "🔑 API_TOKEN (отдельный токен для бота, как для страницы подписки): " API_TOKEN
+    if [ -z "$API_TOKEN" ]; then
+        echo -e "${RED}❌ Ошибка: API_TOKEN не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "👤 ADMINS (Telegram ID через запятую): " ADMINS
+    if [ -z "$ADMINS" ]; then
+        echo -e "${RED}❌ Ошибка: ADMINS не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "📱 TELEGRAM_BOT_USERNAME (без @): " TELEGRAM_BOT_USERNAME
+    if [ -z "$TELEGRAM_BOT_USERNAME" ]; then
+        echo -e "${RED}❌ Ошибка: TELEGRAM_BOT_USERNAME не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "🌐 Домен для админ-панели (например admin.myvpn.com): " ADMIN_DOMAIN
+    if [ -z "$ADMIN_DOMAIN" ]; then
+        echo -e "${RED}❌ Ошибка: Домен не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    # Вопрос о Bedolaga Bot
+    echo -e "\n${YELLOW}🔗 Подключить Bedolaga Bot?${NC}"
+    echo -e "  ${CYAN}1)${NC} Да"
+    echo -e "  ${CYAN}2)${NC} Нет (по умолчанию)"
+    echo ""
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор [1-2, Enter = 2]: )" bedolaga_choice
+
+    BEDOLAGA_API_URL=""
+    BEDOLAGA_API_TOKEN=""
+    if [[ "$bedolaga_choice" == "1" ]]; then
+        read -p "🌐 Домен Bedolaga Bot: " BEDOLAGA_API_URL
+        read -p "🔑 BEDOLAGA_API_TOKEN: " BEDOLAGA_API_TOKEN
+    fi
+
+    # Генерация секретных ключей
+    echo -e "\n${YELLOW}🔐 Генерируем секретные ключи...${NC}"
+    WEBHOOK_SECRET=$(openssl rand -hex 64)
+    WEB_SECRET_KEY=$(openssl rand -hex 32)
+    POSTGRES_PASSWORD=$(openssl rand -hex 24)
+    echo -e "${GREEN}✅ Секретные ключи сгенерированы.${NC}\n"
+
+    # Создание директории
+    echo -e "${YELLOW}📁 Создаём директорию...${NC}"
+    mkdir -p /opt/remnawave-admin && cd /opt/remnawave-admin
+
+    # Клонирование репозитория
+    echo -e "${YELLOW}📥 Клонируем репозиторий...${NC}"
+    git clone https://github.com/Case211/remnawave-admin.git . || {
+        echo -e "${RED}❌ Не удалось клонировать репозиторий.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    }
+
+    # Создание .env файла
+    echo -e "${YELLOW}⚙️  Создаём .env файл...${NC}"
+    cat > .env <<EOF
+# 🤖 Токен бота (из @BotFather)
+BOT_TOKEN=$BOT_TOKEN
+
+# 🌐 Адрес API Remnawave
+API_BASE_URL=$API_BASE_URL
+
+# 🔑 API-токен из панели Remnawave
+API_TOKEN=$API_TOKEN
+
+# 👤 Telegram ID администраторов (через запятую)
+ADMINS=$ADMINS
+DEFAULT_LOCALE=ru
+LOG_LEVEL=INFO
+
+# 🔔 Webhook
+WEBHOOK_PORT=9090
+WEBHOOK_SECRET=$WEBHOOK_SECRET
+
+# 🗄 PostgreSQL
+POSTGRES_USER=remnawave
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+POSTGRES_DB=remnawave_bot
+DATABASE_URL=postgresql://remnawave:$POSTGRES_PASSWORD@remnawave-admin-db:5432/remnawave_bot
+DB_POOL_MIN_SIZE=2
+DB_POOL_MAX_SIZE=10
+SYNC_INTERVAL_SECONDS=300
+
+# 🌐 Веб-панель
+WEB_SECRET_KEY=$WEB_SECRET_KEY
+WEB_JWT_EXPIRE_MINUTES=30
+WEB_JWT_REFRESH_HOURS=6
+WEB_BACKEND_PORT=9091
+WEB_FRONTEND_PORT=13000
+WEB_CORS_ORIGINS=https://$ADMIN_DOMAIN
+EXTERNAL_API_ENABLED=false
+EXTERNAL_API_DOCS=false
+TELEGRAM_BOT_USERNAME=$TELEGRAM_BOT_USERNAME
+
+# 📊 Prometheus
+PROMETHEUS_PORT=9090
+PROMETHEUS_RETENTION=30d
+EOF
+
+    # Добавление Bedolaga Bot
+    if [[ "$bedolaga_choice" == "1" ]]; then
+        cat >> .env <<EOF
+
+# 💰 Интеграция Bedolaga Bot
+BEDOLAGA_API_URL=$BEDOLAGA_API_URL
+BEDOLAGA_API_TOKEN=$BEDOLAGA_API_TOKEN
+EOF
+    else
+        cat >> .env <<EOF
+
+# 💰 Интеграция Bedolaga Bot
+# BEDOLAGA_API_URL=
+# BEDOLAGA_API_TOKEN=
+EOF
+    fi
+
+    echo -e "${GREEN}✅ .env файл создан.${NC}\n"
+
+    # Создание Docker-сети
+    echo -e "${YELLOW}🌐 Создаём Docker-сеть...${NC}"
+    docker network create remnawave-network 2>/dev/null || true
+
+    # Запуск контейнеров
+    echo -e "${YELLOW}🚀 Запускаем контейнеры...${NC}"
+    docker compose up -d || {
+        echo -e "${RED}❌ Не удалось запустить контейнеры.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    }
+    echo -e "${GREEN}✅ Контейнеры запущены.${NC}\n"
+
+    # Настройка Caddy
+    if [[ "$SAME_SERVER" == true ]]; then
+        echo -e "${YELLOW}🔧 Настраиваем Caddy...${NC}"
+        cd /opt/remnawave/caddy
+        
+        # Проверяем, есть ли уже этот домен
+        if ! grep -q "$ADMIN_DOMAIN" Caddyfile; then
+            cat >> Caddyfile <<EOF
+
+# ======================
+# Remnawave Admin + Bot
+# =====================
+https://$ADMIN_DOMAIN {
+    # Frontend
+    handle {
+        reverse_proxy web-frontend:80
+    }
+
+    # Backend API
+    handle /api/* {
+        reverse_proxy web-backend:9091 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSocket (браузер + node-agent)
+    handle /ws/* {
+        reverse_proxy web-backend:9091
+    }
+}
+EOF
+            
+            docker compose down && docker compose up -d
+            echo -e "${GREEN}✅ Caddy обновлён.${NC}"
+        fi
+    else
+        echo -e "\n${YELLOW}⚠️  ВАЖНО: Настройка Caddy на отдельном сервере${NC}"
+        echo -e "1. Установите Caddy на сервере с ботом"
+        echo -e "2. Добавьте в Caddyfile:"
+        echo -e "${CYAN}https://$ADMIN_DOMAIN {${NC}"
+        echo -e "${CYAN}    handle {${NC}"
+        echo -e "${CYAN}        reverse_proxy localhost:80${NC}"
+        echo -e "${CYAN}    }${NC}"
+        echo -e "${CYAN}    handle /api/* {${NC}"
+        echo -e "${CYAN}        reverse_proxy localhost:9091${NC}"
+        echo -e "${CYAN}    }${NC}"
+        echo -e "${CYAN}    handle /ws/* {${NC}"
+        echo -e "${CYAN}        reverse_proxy localhost:9091${NC}"
+        echo -e "${CYAN}    }${NC}"
+        echo -e "${CYAN}}${NC}\n"
+        
+        echo -e "3. В панели Remnawave добавьте webhook:"
+        echo -e "${CYAN}WEBHOOK_URL=https://$ADMIN_DOMAIN:9090/webhook${NC}"
+        echo -e "${CYAN}WEBHOOK_SECRET_HEADER=$WEBHOOK_SECRET${NC}\n"
+    fi
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║   ✅ REMNAWAVE ADMIN WEB + BOT УСТАНОВЛЕН! 🎉     ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}🌐 Админ-панель: ${BOLD}https://$ADMIN_DOMAIN${NC}"
+    echo -e "${CYAN}🤖 Бот:          ${BOLD}@$TELEGRAM_BOT_USERNAME${NC}"
+    echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
+    
+    echo -e "${YELLOW}⚠️  Следующие шаги:${NC}"
+    echo -e "1. Откройте бота в Telegram и отправьте /start"
+    echo -e "2. Перейдите в веб-панель и создайте аккаунт администратора"
+    if [[ "$SAME_SERVER" == true ]]; then
+        echo -e "3. В панели Remnawave добавьте webhook:"
+        echo -e "${CYAN}   WEBHOOK_URL=http://bot:9090/webhook${NC}"
+        echo -e "${CYAN}   WEBHOOK_SECRET_HEADER=$WEBHOOK_SECRET${NC}"
+    fi
+    echo ""
+    
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
 # ПОДМЕНЮ: REMNAWAVE
 # ============================================
 show_remnawave_menu() {
@@ -1025,6 +1277,30 @@ show_warp_menu() {
 }
 
 # ============================================
+# ПОДМЕНЮ: REMNAWAVE ADMIN WEB + BOT
+# ============================================
+show_admin_bot_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}🤖 Remnawave Admin Web + Bot${NC}\n"
+        echo -e "${BOLD}Выберите действие:${NC}"
+        echo -e "  ${CYAN}1)${NC} 🤖 Установить Admin Web + Bot"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" admin_bot_choice
+
+        case $admin_bot_choice in
+            1) install_admin_bot ;;
+            0) break ;;
+            *)
+                echo -e "${RED}❌ Неверный выбор.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# ============================================
 # ГЛАВНОЕ МЕНЮ
 # ============================================
 while true; do
@@ -1034,7 +1310,8 @@ while true; do
     echo -e "${BOLD}Выберите раздел:${NC}"
     echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
     echo -e "  ${CYAN}2)${NC} 🌐 Cloudflare WARP"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${CYAN}3)${NC} 🤖 Remnawave Admin Web + Bot"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     echo ""
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" main_choice
@@ -1042,6 +1319,7 @@ while true; do
     case $main_choice in
         1) show_remnawave_menu ;;
         2) show_warp_menu ;;
+        3) show_admin_bot_menu ;;
         0)
             echo -e "${GREEN}👋 До свидания!${NC}"
             exit 0
