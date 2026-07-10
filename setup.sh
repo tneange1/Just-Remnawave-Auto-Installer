@@ -383,7 +383,7 @@ update_node() {
 }
 
 # ============================================
-# ОПЦИЯ 2: BEDOLAGA BOT + CABINET
+# ОПЦИЯ 2: BEDOLAGA BOT
 # ============================================
 install_bedolaga() {
     show_logo
@@ -396,10 +396,12 @@ install_bedolaga() {
     echo -e "  ${CYAN}2)${NC} На отдельном сервере"
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" server_location
 
-    read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_DOMAIN
-    REMNAWAVE_API_URL="https://$PANEL_DOMAIN"
     if [[ "$server_location" == "1" ]]; then
         REMNAWAVE_API_URL="http://remnawave:3000"
+        echo -e "${GREEN}✅ Используется внутренний адрес панели: $REMNAWAVE_API_URL${NC}"
+    else
+        read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_DOMAIN
+        REMNAWAVE_API_URL="https://$PANEL_DOMAIN"
     fi
 
     read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
@@ -475,7 +477,7 @@ EOF
         cd /opt/remnawave/caddy
         docker compose down && docker compose up -d
     else
-        # Отдельный сервер — создаём свой Caddy
+        # Отдельный сервер
         mkdir -p /opt/bedolaga-caddy && cd /opt/bedolaga-caddy
         cat > Caddyfile <<EOF
 https://$BEDOLAGA_DOMAIN {
