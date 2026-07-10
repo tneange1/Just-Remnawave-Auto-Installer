@@ -5,7 +5,6 @@
 
 ### 🚀 Быстрая установка панели Remnawave в один клик
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/tneange1/Just-Remnawave-Auto-Installer/releases)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-orange.svg)](https://www.gnu.org/software/bash/)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -20,8 +19,6 @@
 
 **Just Remnawave Auto Installer** — это bash-скрипт с интерактивным меню для моментальной установки панели управления [Remnawave](https://github.com/remnawave). Забудьте о ручном копировании команд — скрипт сам всё скачает, настроит и запустит.
 
-> 💡 **Идеально для YouTube-гайдов и Telegram-каналов** — все команды уже встроены в скрипт!
-
 ## ✨ Возможности
 
 - 🎯 **Интерактивное меню** — выбирай, что устанавливать
@@ -30,12 +27,10 @@
 - 📄 **Страница подписки** устанавливается вместе с панелью
 - 🖥️ **Отдельная установка ноды** на другой сервер
 - 🐳 **Docker** ставится автоматически, если его нет
-- 🎨 **Красивый цветной вывод** с логотипом
 
 ## 📋 Требования
 
 - 🖥️ Чистый сервер на **Ubuntu / Debian**
-- 🔑 Root-доступ (sudo)
 - 🌐 Домен(ы), направленные на IP сервера (A-запись)
 
 ## 🚀 Быстрый старт
@@ -43,7 +38,7 @@
 Просто выполни одну команду на сервере:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
+sudo bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
 ```
 
 ## 📖 Использование
@@ -62,26 +57,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-I
 
 ▶ Ваш выбор:
 ```
-
-### 🎯 Опция 1 — Установка панели
-
-Скрипт спросит:
-1. **Домен панели** (например `panel.myvpn.com`)
-2. **Домен страницы подписки** (например `sub.myvpn.com`)
-
-После запуска панели скрипт попросит:
-3. **API Token** — создай его в админке (`Settings → API Tokens`) и вставь в терминал
-
-🎉 Готово! Админка и страница подписки работают по HTTPS.
-
-### 🖥️ Опция 2 — Установка ноды
-
-Запускай на **отдельном сервере**. Скрипт спросит:
-1. **SECRET KEY** — генерируется в панели при создании ноды
-2. **NODE PORT** (по умолчанию `2222`)
-
-> ⚠️ **Важно:** После установки закрой `NODE_PORT` в фаерволе ноды для всех, кроме IP основной панели!
-
 ## 💖 Поддержать проект
 
 Если этот скрипт сэкономил тебе время и нервы, ты можешь поддержать автора! Любая помощь мотивирует делать новые гайды и обновлять скрипт! 🙏
@@ -107,13 +82,11 @@ bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-I
 
 ## 🙏 Благодарности
 
-- 🌟 [Remnawave](https://github.com/remnawave) — за отличную панель
-- 🐳 [Docker](https://www.docker.com/) — за контейнеризацию
-- 🌐 [Caddy](https://caddyserver.com/) — за простой HTTPS
+- 🌟 [Remnawave](https://github.com/remnawave)
+- 🐳 [Docker](https://www.docker.com/)
+- 🌐 [Caddy](https://caddyserver.com/)
 
-## 📜 Лицензия
 
-Этот проект распространяется под лицензией **MIT**. См. файл [LICENSE](LICENSE) для подробностей.
 
 ## ⚠️ Дисклеймер
 
@@ -125,6 +98,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-I
 
 **⭐ Поставь звезду репозиторию, если скрипт был полезен!**
 
-Сделано с ❤️ by [tneangel](https://t.me/tneangel)&[Qwen](https://qwen.ai/)
+Сделано с ❤️ by [tneangel](https://t.me/tneangel)&AI
 
 </div>
