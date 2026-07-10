@@ -1223,6 +1223,446 @@ EOF
 }
 
 # ============================================
+# ОПЦИЯ 3.2: ОБНОВЛЕНИЕ REMNAWAVE ADMIN
+# ============================================
+update_rwa() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Remnawave Admin Web + Bot${NC}\n"
+
+    if [ ! -d "/opt/remnawave-admin" ]; then
+        echo -e "${RED}❌ Ошибка: Папка /opt/remnawave-admin не найдена. Сначала установите бота.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    echo -e "${YELLOW}📥 Обновляем Remnawave Admin...${NC}"
+    cd /opt/remnawave-admin
+    git pull origin main
+    docker compose down
+    docker compose up -d
+    echo -e "${GREEN}✅ Remnawave Admin обновлён и запущен.${NC}"
+
+    echo -e "\n${YELLOW}🧹 Очищаем неиспользуемые образы...${NC}"
+    docker image prune -f
+    echo -e "${GREEN}✅ Очистка завершена.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║   ✅ ОБНОВЛЕНИЕ REMNAWAVE ADMIN ЗАВЕРШЕНО! 🎉     ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 4.1: УСТАНОВКА BEDOLAGA BOT
+# ============================================
+install_bedolaga() {
+    show_logo
+    echo -e "${BLUE}${BOLD}💰 Установка Bedolaga Bot${NC}\n"
+
+    install_docker
+
+    # Вопрос о месте установки
+    echo -e "${YELLOW}Где устанавливается бот?${NC}"
+    echo -e "  ${CYAN}1)${NC} На том же сервере, где и панель Remnawave"
+    echo -e "  ${CYAN}2)${NC} На отдельном сервере"
+    echo ""
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" server_location
+
+    if [[ "$server_location" == "1" ]]; then
+        REMNAWAVE_API_URL="http://remnawave:3000"
+        SAME_SERVER=true
+    else
+        read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_URL
+        REMNAWAVE_API_URL="https://$PANEL_URL"
+        SAME_SERVER=false
+    fi
+
+    # Запрос обязательных данных
+    echo -e "\n${YELLOW}📥 Введите данные для настройки:${NC}\n"
+    
+    read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
+    if [ -z "$BOT_TOKEN" ]; then
+        echo -e "${RED}❌ Ошибка: BOT_TOKEN не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "👤 ADMIN_IDS (Telegram ID через запятую): " ADMIN_IDS
+    if [ -z "$ADMIN_IDS" ]; then
+        echo -e "${RED}❌ Ошибка: ADMIN_IDS не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "🔑 REMNAWAVE_API_KEY (API ключ из панели): " REMNAWAVE_API_KEY
+    if [ -z "$REMNAWAVE_API_KEY" ]; then
+        echo -e "${RED}❌ Ошибка: REMNAWAVE_API_KEY не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    read -p "🌐 Домен для бота (например bedolaga.myvpn.com): " BEDOLAGA_DOMAIN
+    if [ -z "$BEDOLAGA_DOMAIN" ]; then
+        echo -e "${RED}❌ Ошибка: Домен не может быть пустым!${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    # Вопрос о Cabinet
+    echo -e "\n${YELLOW}🗄️  Установить Bedolaga Cabinet?${NC}"
+    echo -e "  ${CYAN}1)${NC} Да"
+    echo -e "  ${CYAN}2)${NC} Нет (по умолчанию)"
+    echo ""
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор [1-2, Enter = 2]: )" cabinet_choice
+
+    CABINET_DOMAIN=""
+    if [[ "$cabinet_choice" == "1" ]]; then
+        read -p "🌐 Домен для Cabinet (например cabinet.myvpn.com): " CABINET_DOMAIN
+        if [ -z "$CABINET_DOMAIN" ]; then
+            echo -e "${RED}❌ Ошибка: Домен Cabinet не может быть пустым!${NC}"
+            read -p "Нажмите Enter для возврата в меню..."
+            return
+        fi
+    fi
+
+    # Генерация секретных ключей
+    echo -e "\n${YELLOW}🔐 Генерируем секретные ключи...${NC}"
+    POSTGRES_PASSWORD=$(openssl rand -hex 24)
+    WEBHOOK_SECRET_TOKEN=$(openssl rand -hex 32)
+    WEB_API_DEFAULT_TOKEN=$(openssl rand -hex 32)
+    CABINET_JWT_SECRET=""
+    if [[ -n "$CABINET_DOMAIN" ]]; then
+        CABINET_JWT_SECRET=$(openssl rand -hex 32)
+    fi
+    echo -e "${GREEN}✅ Секретные ключи сгенерированы.${NC}\n"
+
+    # Создание директории
+    echo -e "${YELLOW}📁 Создаём директорию...${NC}"
+    mkdir -p /opt/bedolaga-bot && cd /opt/bedolaga-bot
+
+    # Клонирование репозитория
+    echo -e "${YELLOW}📥 Клонируем репозиторий...${NC}"
+    git clone https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot.git . || {
+        echo -e "${RED}❌ Не удалось клонировать репозиторий.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    }
+
+    # Создание .env файла
+    echo -e "${YELLOW}⚙️  Создаём .env файл...${NC}"
+    cat > .env <<EOF
+# Bot token and admin-id
+BOT_TOKEN=$BOT_TOKEN
+ADMIN_IDS=$ADMIN_IDS
+
+# Remnawave
+REMNAWAVE_API_URL=$REMNAWAVE_API_URL
+REMNAWAVE_API_KEY=$REMNAWAVE_API_KEY
+REMNAWAVE_AUTH_TYPE=api_key
+
+# DataBase
+POSTGRES_DB=remnawave_bot
+POSTGRES_USER=remnawave_user
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+# Bot Webhook
+BOT_RUN_MODE=webhook
+WEBHOOK_URL=https://$BEDOLAGA_DOMAIN
+WEBHOOK_PATH=/webhook
+WEBHOOK_SECRET_TOKEN=$WEBHOOK_SECRET_TOKEN
+WEBHOOK_DROP_PENDING_UPDATES=true
+WEBHOOK_MAX_QUEUE_SIZE=1024
+WEBHOOK_WORKERS=4
+WEBHOOK_ENQUEUE_TIMEOUT=0.1
+WEBHOOK_WORKER_SHUTDOWN_TIMEOUT=30.0
+WEB_API_DEFAULT_TOKEN=$WEB_API_DEFAULT_TOKEN
+WEB_API_ENABLED=true
+WEB_API_HOST=0.0.0.0
+WEB_API_PORT=8080
+WEB_API_ALLOWED_ORIGINS=*
+EOF
+
+    # Добавление Cabinet
+    if [[ -n "$CABINET_DOMAIN" ]]; then
+        cat >> .env <<EOF
+
+# Bedolaga Cabinet
+CABINET_ENABLED=true
+CABINET_JWT_SECRET=$CABINET_JWT_SECRET
+CABINET_ALLOWED_ORIGINS=https://$CABINET_DOMAIN
+CABINET_URL=https://$CABINET_DOMAIN
+EOF
+    else
+        cat >> .env <<EOF
+
+# Bedolaga Cabinet
+# CABINET_ENABLED=true
+# CABINET_JWT_SECRET=
+# CABINET_ALLOWED_ORIGINS=
+# CABINET_URL=
+EOF
+    fi
+
+    echo -e "${GREEN}✅ .env файл создан.${NC}\n"
+
+    # Создание директорий
+    echo -e "${YELLOW}📂 Создаём директории...${NC}"
+    mkdir -p ./logs ./data ./data/backups ./data/referral_qr
+    chmod -R 755 ./logs ./data
+    chown -R 1000:1000 ./logs ./data
+    echo -e "${GREEN}✅ Директории созданы.${NC}\n"
+
+    # Создание Docker-сети
+    echo -e "${YELLOW}🌐 Создаём Docker-сеть...${NC}"
+    docker network create remnawave-network 2>/dev/null || true
+    docker network create remnawave_bot_network 2>/dev/null || true
+
+    # Запуск контейнеров
+    echo -e "${YELLOW}🚀 Запускаем контейнеры...${NC}"
+    docker compose up -d || {
+        echo -e "${RED}❌ Не удалось запустить контейнеры.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    }
+    echo -e "${GREEN}✅ Контейнеры запущены.${NC}\n"
+
+    # Установка Cabinet если выбран
+    if [[ -n "$CABINET_DOMAIN" ]]; then
+        echo -e "${YELLOW}🗄️  Устанавливаем Bedolaga Cabinet...${NC}"
+        
+        # Получение frontend файлов
+        echo -e "${YELLOW}📥 Получаем frontend файлы...${NC}"
+        docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+        docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+        docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
+        docker rm tmp_cabinet
+        
+        # Размещение файлов
+        mkdir -p /srv/cabinet
+        cp -r ./cabinet-dist/* /srv/cabinet/
+        echo -e "${GREEN}✅ Cabinet файлы размещены.${NC}\n"
+    fi
+
+    # Настройка Caddy
+    if [[ "$SAME_SERVER" == true ]]; then
+        echo -e "${YELLOW}🔧 Настраиваем Caddy...${NC}"
+        cd /opt/remnawave/caddy
+        
+        # Проверяем, есть ли уже этот домен
+        if ! grep -q "$BEDOLAGA_DOMAIN" Caddyfile; then
+            cat >> Caddyfile <<EOF
+
+# ===============================
+# Bedolaga Bot
+# ===============================
+https://$BEDOLAGA_DOMAIN {
+    encode gzip zstd
+
+    handle {
+        reverse_proxy remnawave_bot:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            transport http {
+                read_buffer 0
+            }
+        }
+    }
+}
+EOF
+            
+            # Добавление Cabinet если установлен
+            if [[ -n "$CABINET_DOMAIN" ]] && ! grep -q "$CABINET_DOMAIN" Caddyfile; then
+                cat >> Caddyfile <<EOF
+
+# =============================
+# Bedolaga Cabinet
+# ============================
+https://$CABINET_DOMAIN {
+    encode gzip zstd
+
+    # API запросы → backend бота
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy remnawave_bot:8080
+    }
+
+    # Frontend → nginx контейнер (порт 80 внутри Docker сети)
+    handle {
+        reverse_proxy cabinet_frontend:80
+    }
+}
+EOF
+            fi
+            
+            docker compose down && docker compose up -d
+            echo -e "${GREEN}✅ Caddy обновлён.${NC}"
+        fi
+    else
+        echo -e "\n${YELLOW}⚠️  ВАЖНО: Настройка Caddy на отдельном сервере${NC}"
+        echo -e "1. Установите Caddy на сервере с ботом"
+        echo -e "2. Добавьте в Caddyfile:"
+        echo -e "${CYAN}https://$BEDOLAGA_DOMAIN {${NC}"
+        echo -e "${CYAN}    encode gzip zstd${NC}"
+        echo -e "${CYAN}    handle {${NC}"
+        echo -e "${CYAN}        reverse_proxy remnawave_bot:8080 {${NC}"
+        echo -e "${CYAN}            header_up Host {host}${NC}"
+        echo -e "${CYAN}            header_up X-Real-IP {remote_host}${NC}"
+        echo -e "${CYAN}            transport http {${NC}"
+        echo -e "${CYAN}                read_buffer 0${NC}"
+        echo -e "${CYAN}            }${NC}"
+        echo -e "${CYAN}        }${NC}"
+        echo -e "${CYAN}    }${NC}"
+        echo -e "${CYAN}}${NC}\n"
+        
+        if [[ -n "$CABINET_DOMAIN" ]]; then
+            echo -e "3. Для Cabinet добавьте:"
+            echo -e "${CYAN}https://$CABINET_DOMAIN {${NC}"
+            echo -e "${CYAN}    encode gzip zstd${NC}"
+            echo -e "${CYAN}    handle /api/* {${NC}"
+            echo -e "${CYAN}        uri strip_prefix /api${NC}"
+            echo -e "${CYAN}        reverse_proxy remnawave_bot:8080${NC}"
+            echo -e "${CYAN}    }${NC}"
+            echo -e "${CYAN}    handle {${NC}"
+            echo -e "${CYAN}        reverse_proxy cabinet_frontend:80${NC}"
+            echo -e "${CYAN}    }${NC}"
+            echo -e "${CYAN}}${NC}\n"
+        fi
+    fi
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║        ✅ BEDOLAGA BOT УСТАНОВЛЕН! 🎉             ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}🤖 Бот:     ${BOLD}https://$BEDOLAGA_DOMAIN${NC}"
+    if [[ -n "$CABINET_DOMAIN" ]]; then
+        echo -e "${CYAN}🗄️  Cabinet: ${BOLD}https://$CABINET_DOMAIN${NC}"
+    fi
+    echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
+    
+    echo -e "${YELLOW}⚠️  Следующие шаги:${NC}"
+    echo -e "1. Откройте бота в Telegram и отправьте /start"
+    if [[ -n "$CABINET_DOMAIN" ]]; then
+        echo -e "2. Откройте Cabinet и авторизуйтесь через Telegram"
+    fi
+    echo ""
+    
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 4.2: ОБНОВЛЕНИЕ BEDOLAGA BOT
+# ============================================
+update_bedolaga() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Bedolaga Bot${NC}\n"
+
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Ошибка: Папка /opt/bedolaga-bot не найдена. Сначала установите бота.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    echo -e "${YELLOW}📥 Обновляем Bedolaga Bot...${NC}"
+    cd /opt/bedolaga-bot
+    git pull origin main
+    docker compose down
+    docker compose up -d --build
+    echo -e "${GREEN}✅ Bedolaga Bot обновлён и запущен.${NC}"
+
+    echo -e "\n${YELLOW}🧹 Очищаем неиспользуемые образы...${NC}"
+    docker image prune -f
+    echo -e "${GREEN}✅ Очистка завершена.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║      ✅ ОБНОВЛЕНИЕ BEDOLAGA BOT ЗАВЕРШЕНО! 🎉     ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 4.3: ОБНОВЛЕНИЕ CABINET
+# ============================================
+update_cabinet() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🔄 Обновление Bedolaga Cabinet${NC}\n"
+
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Ошибка: Папка /opt/bedolaga-bot не найдена. Сначала установите бота.${NC}"
+        read -p "Нажмите Enter для возврата в меню..."
+        return
+    fi
+
+    echo -e "${YELLOW}📥 Обновляем Bedolaga Cabinet...${NC}"
+    cd /opt/bedolaga-bot
+    
+    # Обновление frontend
+    docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+    docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
+    rm -rf ./cabinet-dist
+    docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
+    docker rm tmp_cabinet
+    
+    # Размещение файлов
+    rm -rf /srv/cabinet/*
+    cp -r ./cabinet-dist/* /srv/cabinet/
+    
+    # Перезапуск cabinet контейнера если есть
+    if docker ps -a | grep -q cabinet_frontend; then
+        docker restart cabinet_frontend
+    fi
+    
+    echo -e "${GREEN}✅ Bedolaga Cabinet обновлён.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║     ✅ ОБНОВЛЕНИЕ CABINET ЗАВЕРШЕНО! 🎉           ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 5.1: СОЗДАНИЕ БЭКАПА
+# ============================================
+create_backup() {
+    show_logo
+    echo -e "${BLUE}${BOLD}💾 Создание бэкапа панели${NC}\n"
+
+    if [ ! -f "/usr/local/bin/rw-backup" ]; then
+        echo -e "${YELLOW}📥 Устанавливаем скрипт бэкапов...${NC}"
+        curl -Ls https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh -o /tmp/backup-restore.sh
+        chmod +x /tmp/backup-restore.sh
+        bash /tmp/backup-restore.sh backup
+    else
+        rw-backup backup
+    fi
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║        ✅ БЭКАП СОЗДАН! 🎉                        ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 5.2: ВОССТАНОВЛЕНИЕ ИЗ БЭКАПА
+# ============================================
+restore_backup() {
+    show_logo
+    echo -e "${BLUE}${BOLD}💾 Восстановление из бэкапа${NC}\n"
+
+    if [ ! -f "/usr/local/bin/rw-backup" ]; then
+        echo -e "${YELLOW}📥 Устанавливаем скрипт бэкапов...${NC}"
+        curl -Ls https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh -o /tmp/backup-restore.sh
+        chmod +x /tmp/backup-restore.sh
+        bash /tmp/backup-restore.sh restore
+    else
+        rw-backup restore
+    fi
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║        ✅ ВОССТАНОВЛЕНИЕ ЗАВЕРШЕНО! 🎉            ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
 # ПОДМЕНЮ: REMNAWAVE
 # ============================================
 show_remnawave_menu() {
@@ -1285,12 +1725,68 @@ show_admin_bot_menu() {
         echo -e "${BLUE}${BOLD}🤖 Remnawave Admin Web + Bot${NC}\n"
         echo -e "${BOLD}Выберите действие:${NC}"
         echo -e "  ${CYAN}1)${NC} 🤖 Установить Admin Web + Bot"
+        echo -e "  ${CYAN}2)${NC} 🔄 Обновить Admin Web + Bot"
         echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
         echo ""
         read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" admin_bot_choice
 
         case $admin_bot_choice in
             1) install_admin_bot ;;
+            2) update_rwa ;;
+            0) break ;;
+            *)
+                echo -e "${RED}❌ Неверный выбор.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# ============================================
+# ПОДМЕНЮ: BEDOLAGA BOT
+# ============================================
+show_bedolaga_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}💰 Bedolaga Bot${NC}\n"
+        echo -e "${BOLD}Выберите действие:${NC}"
+        echo -e "  ${CYAN}1)${NC} 💰 Установить Bedolaga Bot"
+        echo -e "  ${CYAN}2)${NC} 🔄 Обновить Bedolaga Bot"
+        echo -e "  ${CYAN}3)${NC} 🗄️  Обновить Cabinet"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" bedolaga_choice
+
+        case $bedolaga_choice in
+            1) install_bedolaga ;;
+            2) update_bedolaga ;;
+            3) update_cabinet ;;
+            0) break ;;
+            *)
+                echo -e "${RED}❌ Неверный выбор.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# ============================================
+# ПОДМЕНЮ: БЭКАПЫ
+# ============================================
+show_backup_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}💾 Бэкапы панели${NC}\n"
+        echo -e "${BOLD}Выберите действие:${NC}"
+        echo -e "  ${CYAN}1)${NC} 💾 Создать бэкап"
+        echo -e "  ${CYAN}2)${NC} 📥 Восстановить из бэкапа"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" backup_choice
+
+        case $backup_choice in
+            1) create_backup ;;
+            2) restore_backup ;;
             0) break ;;
             *)
                 echo -e "${RED}❌ Неверный выбор.${NC}"
@@ -1311,6 +1807,8 @@ while true; do
     echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
     echo -e "  ${CYAN}2)${NC} 🌐 Cloudflare WARP"
     echo -e "  ${CYAN}3)${NC} 🤖 Remnawave Admin Web + Bot"
+    echo -e "  ${CYAN}4)${NC} 💰 Bedolaga Bot"
+    echo -e "  ${CYAN}5)${NC} 💾 Бэкапы"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     echo ""
@@ -1320,6 +1818,8 @@ while true; do
         1) show_remnawave_menu ;;
         2) show_warp_menu ;;
         3) show_admin_bot_menu ;;
+        4) show_bedolaga_menu ;;
+        5) show_backup_menu ;;
         0)
             echo -e "${GREEN}👋 До свидания!${NC}"
             exit 0
