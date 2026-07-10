@@ -398,7 +398,7 @@ install_bedolaga() {
 
     if [[ "$server_location" == "1" ]]; then
         REMNAWAVE_API_URL="http://remnawave:3000"
-        echo -e "${GREEN}✅ Используется внутренний адрес панели: $REMNAWAVE_API_URL${NC}"
+        echo -e "${GREEN}✅ Используется внутренний адрес: $REMNAWAVE_API_URL${NC}"
     else
         read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_DOMAIN
         REMNAWAVE_API_URL="https://$PANEL_DOMAIN"
