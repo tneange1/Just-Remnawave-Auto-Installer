@@ -383,7 +383,147 @@ update_node() {
 }
 
 # ============================================
-# ОПЦИЯ 2: CLOUDFLARE WARP (установка + удаление)
+# ОПЦИЯ 2: BEDOLAGA BOT + CABINET
+# ============================================
+install_bedolaga() {
+    show_logo
+    echo -e "${BLUE}${BOLD}💰 Установка Bedolaga Bot${NC}\n"
+
+    install_docker
+
+    echo -e "${YELLOW}Где устанавливается бот?${NC}"
+    echo -e "  ${CYAN}1)${NC} На том же сервере, где и панель"
+    echo -e "  ${CYAN}2)${NC} На отдельном сервере"
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" server_location
+
+    read -p "🌐 Введите домен панели Remnawave (например panel.myvpn.com): " PANEL_DOMAIN
+    REMNAWAVE_API_URL="https://$PANEL_DOMAIN"
+    if [[ "$server_location" == "1" ]]; then
+        REMNAWAVE_API_URL="http://remnawave:3000"
+    fi
+
+    read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
+    read -p "👤 ADMIN_IDS (Telegram ID через запятую): " ADMIN_IDS
+    read -p "🔑 REMNAWAVE_API_KEY (API ключ из панели): " REMNAWAVE_API_KEY
+    read -p "🌐 Домен для бота (например bedolaga.myvpn.com): " BEDOLAGA_DOMAIN
+
+    POSTGRES_PASSWORD=$(openssl rand -hex 24)
+    WEBHOOK_SECRET_TOKEN=$(openssl rand -hex 32)
+    WEB_API_DEFAULT_TOKEN=$(openssl rand -hex 32)
+
+    mkdir -p /opt/bedolaga-bot && cd /opt/bedolaga-bot
+    git clone https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot.git .
+    
+    cat > .env <<EOF
+BOT_TOKEN=$BOT_TOKEN
+ADMIN_IDS=$ADMIN_IDS
+REMNAWAVE_API_URL=$REMNAWAVE_API_URL
+REMNAWAVE_API_KEY=$REMNAWAVE_API_KEY
+REMNAWAVE_AUTH_TYPE=api_key
+POSTGRES_DB=remnawave_bot
+POSTGRES_USER=remnawave_user
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+BOT_RUN_MODE=webhook
+WEBHOOK_URL=https://$BEDOLAGA_DOMAIN
+WEBHOOK_PATH=/webhook
+WEBHOOK_SECRET_TOKEN=$WEBHOOK_SECRET_TOKEN
+WEBHOOK_DROP_PENDING_UPDATES=true
+WEBHOOK_MAX_QUEUE_SIZE=1024
+WEBHOOK_WORKERS=4
+WEBHOOK_ENQUEUE_TIMEOUT=0.1
+WEBHOOK_WORKER_SHUTDOWN_TIMEOUT=30.0
+WEB_API_DEFAULT_TOKEN=$WEB_API_DEFAULT_TOKEN
+WEB_API_ENABLED=true
+WEB_API_HOST=0.0.0.0
+WEB_API_PORT=8080
+WEB_API_ALLOWED_ORIGINS=*
+EOF
+
+    mkdir -p ./logs ./data ./data/backups ./data/referral_qr
+    chmod -R 755 ./logs ./data
+    chown -R 1000:1000 ./logs ./data
+
+    docker network create remnawave-network 2>/dev/null || true
+    docker network create remnawave_bot_network 2>/dev/null || true
+
+    if [[ "$server_location" == "1" ]]; then
+        echo -e "${YELLOW}📥 Используем docker-compose.local.yml (тот же сервер)...${NC}"
+        if [ -f "docker-compose.local.yml" ]; then
+            rm -f docker-compose.yml
+            mv docker-compose.local.yml docker-compose.yml
+        fi
+    fi
+
+    docker compose up -d
+
+    # Настройка Caddy
+    if [[ "$server_location" == "1" ]]; then
+        BEDOLAGA_BLOCK="https://$BEDOLAGA_DOMAIN {
+    encode gzip zstd
+    handle {
+        reverse_proxy remnawave_bot:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            transport http {
+                read_buffer 0
+            }
+        }
+    }
+}"
+        add_caddy_block "$BEDOLAGA_DOMAIN" "$BEDOLAGA_BLOCK"
+        
+        cd /opt/remnawave/caddy
+        docker compose down && docker compose up -d
+    else
+        # Отдельный сервер — создаём свой Caddy
+        mkdir -p /opt/bedolaga-caddy && cd /opt/bedolaga-caddy
+        cat > Caddyfile <<EOF
+https://$BEDOLAGA_DOMAIN {
+    encode gzip zstd
+    handle {
+        reverse_proxy remnawave_bot:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            transport http {
+                read_buffer 0
+            }
+        }
+    }
+}
+EOF
+        cat > docker-compose.yml <<EOF
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: remnawave_caddy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - bot_network
+volumes:
+  caddy_data:
+  caddy_config:
+networks:
+  bot_network:
+    name: remnawave_bot_network
+    external: true
+EOF
+        docker compose up -d
+    fi
+
+    echo -e "${GREEN}✅ Bedolaga Bot успешно установлен!${NC}"
+    echo -e "🌐 Бот: https://$BEDOLAGA_DOMAIN\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 3: CLOUDFLARE WARP
 # ============================================
 install_warp() {
     show_logo
@@ -410,7 +550,7 @@ uninstall_warp() {
 }
 
 # ============================================
-# ОПЦИЯ 3: БЭКАПЫ
+# ОПЦИЯ 4: БЭКАПЫ
 # ============================================
 run_backup() {
     show_logo
@@ -431,7 +571,7 @@ run_backup() {
 }
 
 # ============================================
-# ОПЦИЯ 4: ЛОГИ
+# ОПЦИЯ 5: ЛОГИ
 # ============================================
 show_logs_menu() {
     while true; do
@@ -456,13 +596,11 @@ show_logs_menu() {
 show_panel_logs() {
     show_logo
     echo -e "${BLUE}${BOLD}🚀 Логи панели Remnawave${NC}\n"
-    
     if [ ! -d "/opt/remnawave" ]; then
         echo -e "${RED}❌ Папка /opt/remnawave не найдена.${NC}"
         read -p "Нажмите Enter..."
         return
     fi
-    
     cd /opt/remnawave
     echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
     docker compose logs -f --tail=100
@@ -471,13 +609,11 @@ show_panel_logs() {
 show_subscription_logs() {
     show_logo
     echo -e "${BLUE}${BOLD}📄 Логи страницы подписки${NC}\n"
-    
     if [ ! -d "/opt/remnawave/subscription" ]; then
         echo -e "${RED}❌ Папка /opt/remnawave/subscription не найдена.${NC}"
         read -p "Нажмите Enter..."
         return
     fi
-    
     cd /opt/remnawave/subscription
     echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
     docker compose logs -f --tail=100
@@ -532,19 +668,21 @@ while true; do
     create_alias
     
     echo -e "${BOLD}Выберите раздел:${NC}"
-    echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
-    echo -e "  ${CYAN}2)${NC} 🌐 Cloudflare WARP"
-    echo -e "  ${CYAN}3)${NC} 💾 Бэкапы"
-    echo -e "  ${CYAN}4)${NC} 📋 Логи"
+    echo -e "  ${CYAN}1)${NC} 🚀 Remnawave (Panel + Node)"
+    echo -e "  ${CYAN}2)${NC} 💰 Bedolaga Bot"
+    echo -e "  ${CYAN}3)${NC} 🌐 Cloudflare WARP"
+    echo -e "  ${CYAN}4)${NC} 💾 Бэкапы"
+    echo -e "  ${CYAN}5)${NC} 📋 Логи"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" main_choice
 
     case $main_choice in
         1) show_remnawave_menu ;;
-        2) show_warp_menu ;;
-        3) run_backup ;;
-        4) show_logs_menu ;;
+        2) install_bedolaga ;;
+        3) show_warp_menu ;;
+        4) run_backup ;;
+        5) show_logs_menu ;;
         0) echo -e "${GREEN}👋 До свидания!${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
     esac
