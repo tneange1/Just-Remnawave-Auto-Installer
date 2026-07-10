@@ -55,7 +55,7 @@ install_docker() {
 }
 
 # ============================================
-# ОПЦИЯ 1: УСТАНОВКА ПАНЕЛИ + ПОДПИСКИ
+# ОПЦИЯ 1.1: УСТАНОВКА ПАНЕЛИ + ПОДПИСКИ
 # ============================================
 install_panel() {
     show_logo
@@ -211,7 +211,7 @@ EOF
 }
 
 # ============================================
-# ОПЦИЯ 2: УСТАНОВКА НОДЫ
+# ОПЦИЯ 1.2: УСТАНОВКА НОДЫ
 # ============================================
 install_node() {
     show_logo
@@ -263,7 +263,7 @@ EOF
 }
 
 # ============================================
-# ОПЦИЯ 3: ОБНОВЛЕНИЕ КОМПОНЕНТОВ
+# ОПЦИЯ 1.3: ОБНОВЛЕНИЕ КОМПОНЕНТОВ
 # ============================================
 update_components() {
     show_logo
@@ -272,7 +272,7 @@ update_components() {
     echo -e "${BOLD}Что хотите обновить?${NC}"
     echo -e "  ${CYAN}1)${NC} 🚀 Обновить Панель + Страницу подписки"
     echo -e "  ${CYAN}2)${NC} 🖥️  Обновить Ноду"
-    echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+    echo -e "  ${CYAN}0)${NC} 🔙 Назад"
     echo ""
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" update_choice
 
@@ -361,7 +361,7 @@ update_node() {
 }
 
 # ============================================
-# ОПЦИЯ 4: УСТАНОВКА CLOUDFLARE WARP
+# ОПЦИЯ 2.1: УСТАНОВКА CLOUDFLARE WARP
 # ============================================
 install_warp() {
     show_logo
@@ -928,7 +928,7 @@ WARP_CMD_EOF
 }
 
 # ============================================
-# ОПЦИЯ 5: УДАЛЕНИЕ CLOUDFLARE WARP
+# ОПЦИЯ 2.2: УДАЛЕНИЕ CLOUDFLARE WARP
 # ============================================
 uninstall_warp() {
     show_logo
@@ -971,28 +971,77 @@ uninstall_warp() {
 }
 
 # ============================================
+# ПОДМЕНЮ: REMNAWAVE
+# ============================================
+show_remnawave_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}🚀 Remnawave${NC}\n"
+        echo -e "${BOLD}Выберите действие:${NC}"
+        echo -e "  ${CYAN}1)${NC} 🚀 Установить Панель + Страницу подписки"
+        echo -e "  ${CYAN}2)${NC} 🖥️  Установить Ноду"
+        echo -e "  ${CYAN}3)${NC} 🔄 Обновить компоненты"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" remnawave_choice
+
+        case $remnawave_choice in
+            1) install_panel ;;
+            2) install_node ;;
+            3) update_components ;;
+            0) break ;;
+            *)
+                echo -e "${RED}❌ Неверный выбор.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# ============================================
+# ПОДМЕНЮ: CLOUDFLARE WARP
+# ============================================
+show_warp_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}🌐 Cloudflare WARP${NC}\n"
+        echo -e "${BOLD}Выберите действие:${NC}"
+        echo -e "  ${CYAN}1)${NC} 🌐 Установить Cloudflare WARP"
+        echo -e "  ${CYAN}2)${NC} 🗑️  Удалить Cloudflare WARP"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" warp_choice
+
+        case $warp_choice in
+            1) install_warp ;;
+            2) uninstall_warp ;;
+            0) break ;;
+            *)
+                echo -e "${RED}❌ Неверный выбор.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# ============================================
 # ГЛАВНОЕ МЕНЮ
 # ============================================
 while true; do
     show_logo
     create_alias
     
-    echo -e "${BOLD}Выберите действие:${NC}"
-    echo -e "  ${CYAN}1)${NC} 🚀 Установить Панель + Страницу подписки"
-    echo -e "  ${CYAN}2)${NC} 🖥️  Установить Ноду (на отдельный сервер)"
-    echo -e "  ${CYAN}3)${NC} 🔄 Обновить компоненты"
-    echo -e "  ${CYAN}4)${NC} 🌐 Установить Cloudflare WARP"
-    echo -e "  ${CYAN}5)${NC} 🗑️  Удалить Cloudflare WARP"
+    echo -e "${BOLD}Выберите раздел:${NC}"
+    echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
+    echo -e "  ${CYAN}2)${NC} 🌐 Cloudflare WARP"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     echo ""
-    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" main_choice
 
-    case $choice in
-        1) install_panel ;;
-        2) install_node ;;
-        3) update_components ;;
-        4) install_warp ;;
-        5) uninstall_warp ;;
+    case $main_choice in
+        1) show_remnawave_menu ;;
+        2) show_warp_menu ;;
         0)
             echo -e "${GREEN}👋 До свидания!${NC}"
             exit 0
