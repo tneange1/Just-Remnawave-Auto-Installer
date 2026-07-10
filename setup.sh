@@ -427,7 +427,7 @@ install_bedolaga() {
     read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
     read -p "👤 ADMIN_IDS (Telegram ID через запятую): " ADMIN_IDS
     read -p "🔑 REMNAWAVE_API_KEY (API ключ из панели): " REMNAWAVE_API_KEY
-    read -p "🌐 Домен для бота: " BEDOLAGA_DOMAIN
+    read -p "🌐 Домен для бота (например bedolaga.myvpn.com): " BEDOLAGA_DOMAIN
 
     POSTGRES_PASSWORD=$(openssl rand -hex 24)
     WEBHOOK_SECRET_TOKEN=$(openssl rand -hex 32)
@@ -469,6 +469,7 @@ EOF
     docker network create remnawave_bot_network 2>/dev/null || true
 
     if [[ "$server_location" == "1" ]]; then
+        echo -e "${YELLOW}📥 Используем docker-compose.local.yml (тот же сервер)...${NC}"
         if [ -f "docker-compose.local.yml" ]; then
             rm -f docker-compose.yml
             mv docker-compose.local.yml docker-compose.yml
@@ -496,9 +497,9 @@ EOF
         docker compose down && docker compose up -d
     fi
 
-    echo -e "${GREEN}✅ Bedolaga Bot установлен!${NC}"
+    echo -e "${GREEN}✅ Bedolaga Bot успешно установлен!${NC}"
     echo -e "🌐 Бот: https://$BEDOLAGA_DOMAIN\n"
-    read -p "Нажмите Enter..."
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
 install_cabinet() {
@@ -514,6 +515,7 @@ install_cabinet() {
     read -p "🌐 Домен для Cabinet (например cabinet.myvpn.com): " CABINET_DOMAIN
     CABINET_JWT_SECRET=$(openssl rand -hex 32)
 
+    # Добавляем настройки в .env бота
     cd /opt/bedolaga-bot
     if ! grep -q "CABINET_ENABLED=true" .env; then
         cat >> .env <<EOF
@@ -524,10 +526,14 @@ CABINET_JWT_SECRET=$CABINET_JWT_SECRET
 CABINET_ALLOWED_ORIGINS=https://$CABINET_DOMAIN
 CABINET_URL=https://$CABINET_DOMAIN
 EOF
-        echo -e "${GREEN}✅ Настройки Cabinet добавлены в .env${NC}"
     fi
 
-    echo -e "${YELLOW}📥 Получаем frontend файлы Cabinet...${NC}"
+    echo -e "${YELLOW}📥 Клонируем Cabinet...${NC}"
+    cd /opt
+    git clone https://github.com/BEDOLAGA-DEV/bedolaga-cabinet.git
+    cd bedolaga-cabinet
+
+    echo -e "${YELLOW}📥 Получаем frontend файлы...${NC}"
     docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
     docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
     rm -rf ./cabinet-dist
@@ -537,15 +543,7 @@ EOF
     mkdir -p /srv/cabinet
     cp -r ./cabinet-dist/* /srv/cabinet/
 
-    docker compose down
-    docker compose up -d
-
-    # Подключение Caddy
-    BOT_NETWORK=$(docker inspect remnawave_bot -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | tr -d ' ')
-    if [ -n "$BOT_NETWORK" ]; then
-        docker network connect "$BOT_NETWORK" caddy 2>/dev/null || true
-    fi
-
+    # Caddy блок
     CABINET_BLOCK="https://$CABINET_DOMAIN {
     encode gzip zstd
     handle /api/* {
@@ -561,9 +559,16 @@ EOF
     cd /opt/remnawave/caddy
     docker compose down && docker compose up -d
 
+    # Подключение сети
+    BOT_NETWORK=$(docker inspect remnawave_bot -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | tr -d ' ')
+    if [ -n "$BOT_NETWORK" ]; then
+        docker network connect "$BOT_NETWORK" caddy 2>/dev/null || true
+        echo -e "${GREEN}✅ Caddy подключён к сети бота${NC}"
+    fi
+
     echo -e "${GREEN}✅ MiniAPP (Cabinet) установлен!${NC}"
     echo -e "🗄️  Cabinet: https://$CABINET_DOMAIN\n"
-    read -p "Нажмите Enter..."
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
 update_bedolaga() {
@@ -571,16 +576,17 @@ update_bedolaga() {
     echo -e "${BLUE}${BOLD}🔄 Обновление Bedolaga компонентов${NC}\n"
 
     if [ -d "/opt/bedolaga-bot" ]; then
-        echo -e "${YELLOW}Обновляем Bedolaga Bot...${NC}"
+        echo -e "${YELLOW}Обновляем Bot...${NC}"
         cd /opt/bedolaga-bot
         git pull origin main
         docker compose down
         docker compose up -d --build
     fi
 
-    if [ -d "/opt/bedolaga-bot" ]; then
-        echo -e "${YELLOW}Обновляем Cabinet...${NC}"
-        cd /opt/bedolaga-bot
+    echo -e "${YELLOW}Обновляем Cabinet...${NC}"
+    cd /opt
+    if [ -d "bedolaga-cabinet" ]; then
+        cd bedolaga-cabinet
         docker pull ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
         docker create --name tmp_cabinet ghcr.io/bedolaga-dev/bedolaga-cabinet:latest
         rm -rf ./cabinet-dist
@@ -588,11 +594,10 @@ update_bedolaga() {
         docker rm tmp_cabinet
         rm -rf /srv/cabinet/*
         cp -r ./cabinet-dist/* /srv/cabinet/
-        docker restart cabinet_frontend 2>/dev/null || true
     fi
 
     docker image prune -f
-    echo -e "${GREEN}✅ Компоненты Bedolaga обновлены!${NC}\n"
+    echo -e "${GREEN}✅ Обновление Bedolaga завершено!${NC}\n"
     read -p "Нажмите Enter..."
 }
 
@@ -605,7 +610,7 @@ install_warp() {
 
     install_docker
 
-    echo -e "${YELLOW}📥 Запускаем официальный скрипт установки...${NC}"
+    echo -e "${YELLOW}📥 Запускаем официальный скрипт установки warp-native...${NC}"
     bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
     
     echo -e "${GREEN}✅ WARP успешно установлен!${NC}\n"
@@ -616,7 +621,7 @@ uninstall_warp() {
     show_logo
     echo -e "${BLUE}${BOLD}🗑️  Удаление Cloudflare WARP${NC}\n"
 
-    echo -e "${YELLOW}📥 Запускаем скрипт удаления...${NC}"
+    echo -e "${YELLOW}📥 Запускаем официальный скрипт удаления...${NC}"
     bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/uninstall.sh) || true
     
     echo -e "${GREEN}✅ WARP успешно удалён.${NC}\n"
@@ -670,11 +675,13 @@ show_logs_menu() {
 show_panel_logs() {
     show_logo
     echo -e "${BLUE}${BOLD}🚀 Логи панели Remnawave${NC}\n"
+    
     if [ ! -d "/opt/remnawave" ]; then
         echo -e "${RED}❌ Папка /opt/remnawave не найдена.${NC}"
         read -p "Нажмите Enter..."
         return
     fi
+    
     cd /opt/remnawave
     echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
     docker compose logs -f --tail=100
@@ -683,18 +690,20 @@ show_panel_logs() {
 show_subscription_logs() {
     show_logo
     echo -e "${BLUE}${BOLD}📄 Логи страницы подписки${NC}\n"
+    
     if [ ! -d "/opt/remnawave/subscription" ]; then
         echo -e "${RED}❌ Папка /opt/remnawave/subscription не найдена.${NC}"
         read -p "Нажмите Enter..."
         return
     fi
+    
     cd /opt/remnawave/subscription
     echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
     docker compose logs -f --tail=100
 }
 
 # ============================================
-# ПОДМЕНЮ REMNAWAVE
+# ПОДМЕНЮ
 # ============================================
 show_remnawave_menu() {
     while true; do
@@ -742,7 +751,7 @@ while true; do
     create_alias
     
     echo -e "${BOLD}Выберите раздел:${NC}"
-    echo -e "  ${CYAN}1)${NC} 🚀 Remnawave (Panel + Node)"
+    echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
     echo -e "  ${CYAN}2)${NC} 💰 Bedolaga (Bot + MiniAPP)"
     echo -e "  ${CYAN}3)${NC} 🌐 Cloudflare WARP"
     echo -e "  ${CYAN}4)${NC} 💾 Бэкапы"
