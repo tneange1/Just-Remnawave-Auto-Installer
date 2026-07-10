@@ -104,7 +104,7 @@ rebuild_caddyfile() {
     echo "# Auto-generated - do not edit manually" >> "$caddyfile"
     echo "" >> "$caddyfile"
     
-    # Добавляем все блоки
+    # Добавляем все блоки из папки blocks/
     if [ -d "$blocks_dir" ]; then
         for block_file in "$blocks_dir"/*; do
             if [ -f "$block_file" ]; then
@@ -163,7 +163,7 @@ install_panel() {
     mkdir -p /opt/remnawave/caddy && cd /opt/remnawave/caddy
     init_caddy_blocks
 
-    # Создаём блок для панели
+    # Создаём блок для панели И СОХРАНЯЕМ В blocks/
     PANEL_BLOCK="https://$PANEL_DOMAIN {
     reverse_proxy * http://remnawave:3000
 }"
@@ -241,7 +241,7 @@ EOF
 
         echo -e "${YELLOW}🔄 Шаг 7. Добавляем домен подписки в Caddy...${NC}"
         
-        # Создаём блок для подписки
+        # Создаём блок для подписки И СОХРАНЯЕМ В blocks/
         SUB_BLOCK="https://$SUB_DOMAIN {
     reverse_proxy * http://remnawave-subscription-page:3010
 }"
@@ -548,7 +548,7 @@ EOF
     docker compose up -d
 
     if [[ "$SAME_SERVER" == true ]]; then
-        # Создаём блок для RWA
+        # Создаём блок для RWA И СОХРАНЯЕМ В blocks/
         RWA_BLOCK="https://$ADMIN_DOMAIN {
     handle {
         reverse_proxy web-frontend:80
@@ -722,7 +722,7 @@ EOF
 
     # Настройка Caddy
     if [[ "$server_location" == "1" ]]; then
-        # Создаём блок для Bedolaga
+        # Создаём блок для Bedolaga И СОХРАНЯЕМ В blocks/
         BEDOLAGA_BLOCK="https://$BEDOLAGA_DOMAIN {
     encode gzip zstd
     handle {
@@ -823,7 +823,7 @@ EOF
         echo -e "${CYAN}   docker network connect <network_name> caddy${NC}"
     fi
 
-    # Создаём блок для Cabinet
+    # Создаём блок для Cabinet И СОХРАНЯЕМ В blocks/
     CABINET_BLOCK="https://$CABINET_DOMAIN {
     encode gzip zstd
     handle /api/* {
@@ -957,6 +957,110 @@ run_backup() {
 }
 
 # ============================================
+# ОПЦИЯ 6: ЛОГИ
+# ============================================
+show_logs_menu() {
+    while true; do
+        show_logo
+        echo -e "${BLUE}${BOLD}📋 Просмотр логов${NC}\n"
+        echo -e "${BOLD}Выберите компонент:${NC}"
+        echo -e "  ${CYAN}1)${NC} 🚀 Логи панели Remnawave"
+        echo -e "  ${CYAN}2)${NC} 📄 Логи страницы подписки"
+        echo -e "  ${CYAN}3)${NC} 🤖 Логи RWA (Admin Web + Bot)"
+        echo -e "  ${CYAN}4)${NC} 💰 Логи Bedolaga Bot"
+        echo -e "  ${CYAN}5)${NC} 🗄️  Логи Cabinet"
+        echo -e "  ${CYAN}0)${NC} 🔙 Назад в главное меню"
+        echo ""
+        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" log_choice
+
+        case $log_choice in
+            1) show_panel_logs ;;
+            2) show_subscription_logs ;;
+            3) show_rwa_logs ;;
+            4) show_bedolaga_logs ;;
+            5) show_cabinet_logs ;;
+            0) break ;;
+            *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
+        esac
+    done
+}
+
+show_panel_logs() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🚀 Логи панели Remnawave${NC}\n"
+    
+    if [ ! -d "/opt/remnawave" ]; then
+        echo -e "${RED}❌ Папка /opt/remnawave не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+    
+    cd /opt/remnawave
+    echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
+    docker compose logs -f --tail=100
+}
+
+show_subscription_logs() {
+    show_logo
+    echo -e "${BLUE}${BOLD}📄 Логи страницы подписки${NC}\n"
+    
+    if [ ! -d "/opt/remnawave/subscription" ]; then
+        echo -e "${RED}❌ Папка /opt/remnawave/subscription не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+    
+    cd /opt/remnawave/subscription
+    echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
+    docker compose logs -f --tail=100
+}
+
+show_rwa_logs() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🤖 Логи RWA (Admin Web + Bot)${NC}\n"
+    
+    if [ ! -d "/opt/remnawave-admin" ]; then
+        echo -e "${RED}❌ Папка /opt/remnawave-admin не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+    
+    cd /opt/remnawave-admin
+    echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
+    docker compose logs -f --tail=100
+}
+
+show_bedolaga_logs() {
+    show_logo
+    echo -e "${BLUE}${BOLD}💰 Логи Bedolaga Bot${NC}\n"
+    
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Папка /opt/bedolaga-bot не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+    
+    cd /opt/bedolaga-bot
+    echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
+    docker compose logs -f --tail=100 remnawave_bot
+}
+
+show_cabinet_logs() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🗄️  Логи Cabinet${NC}\n"
+    
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Папка /opt/bedolaga-bot не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+    
+    cd /opt/bedolaga-bot
+    echo -e "${YELLOW}Нажмите Ctrl+C для выхода из логов${NC}\n"
+    docker compose logs -f --tail=100 cabinet_frontend
+}
+
+# ============================================
 # ПОДМЕНЮ
 # ============================================
 show_remnawave_menu() {
@@ -1054,6 +1158,7 @@ while true; do
     echo -e "  ${CYAN}3)${NC} 🤖 Remnawave Admin Web + Bot"
     echo -e "  ${CYAN}4)${NC} 💰 Bedolaga"
     echo -e "  ${CYAN}5)${NC} 💾 Бэкапы"
+    echo -e "  ${CYAN}6)${NC} 📋 Логи"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" main_choice
@@ -1064,6 +1169,7 @@ while true; do
         3) show_admin_bot_menu ;;
         4) show_bedolaga_menu ;;
         5) run_backup ;;
+        6) show_logs_menu ;;
         0) echo -e "${GREEN}👋 До свидания!${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
     esac
