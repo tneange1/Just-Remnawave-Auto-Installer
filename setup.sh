@@ -114,7 +114,7 @@ EOF
 }
 
 # ============================================
-# ОПЦИЯ 1.1: УСТАНОВКА ПАНЕЛИ + ПОДПИСКИ
+# ОПЦИЯ 1: REMNAWAVE (Panel + Node)
 # ============================================
 install_panel() {
     show_logo
@@ -543,10 +543,8 @@ VITE_APP_NAME=$APP_NAME
 VITE_APP_LOGO=V
 EOF
 
-    echo -e "${YELLOW}📥 Собираем Cabinet...${NC}"
+    echo -e "${YELLOW}📥 Собираем и копируем файлы...${NC}"
     docker compose build
-
-    echo -e "${YELLOW}📥 Копируем файлы...${NC}"
     docker create --name tmp_cabinet cabinet_frontend
     rm -rf ./cabinet-dist
     docker cp tmp_cabinet:/usr/share/nginx/html ./cabinet-dist
@@ -609,7 +607,89 @@ update_bedolaga() {
 }
 
 # ============================================
-# ОПЦИЯ 3: CLOUDFLARE WARP
+# ОПЦИЯ 3: REMNAWAVE ADMIN WEB + BOT
+# ============================================
+install_admin_bot() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🤖 Установка Remnawave Admin Web + Bot${NC}\n"
+
+    install_docker
+
+    echo -e "${YELLOW}Где устанавливается Admin Bot?${NC}"
+    echo -e "  ${CYAN}1)${NC} На том же сервере, где и панель"
+    echo -e "  ${CYAN}2)${NC} На отдельном сервере"
+    read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" server_location
+
+    if [[ "$server_location" == "1" ]]; then
+        API_BASE_URL="http://remnawave:3000"
+    else
+        read -p "🌐 Введите домен панели: " PANEL_DOMAIN
+        API_BASE_URL="https://$PANEL_DOMAIN"
+    fi
+
+    read -p "🤖 BOT_TOKEN (от @BotFather): " BOT_TOKEN
+    read -p "🔑 API_TOKEN (из панели): " API_TOKEN
+    read -p "👤 ADMINS (Telegram ID через запятую): " ADMINS
+    read -p "📱 TELEGRAM_BOT_USERNAME (без @): " BOT_USERNAME
+    read -p "🌐 Домен для веб-панели (например admin.myvpn.com): " ADMIN_DOMAIN
+
+    WEB_SECRET_KEY=$(openssl rand -hex 32)
+    POSTGRES_PASSWORD=$(openssl rand -hex 24)
+
+    mkdir -p /opt/remnawave-admin && cd /opt/remnawave-admin
+    git clone https://github.com/Case211/remnawave-admin.git .
+
+    cat > .env <<EOF
+BOT_TOKEN=$BOT_TOKEN
+API_BASE_URL=$API_BASE_URL
+API_TOKEN=$API_TOKEN
+ADMINS=$ADMINS
+DEFAULT_LOCALE=ru
+LOG_LEVEL=INFO
+WEBHOOK_PORT=9090
+WEB_SECRET_KEY=$WEB_SECRET_KEY
+POSTGRES_USER=remnawave
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+POSTGRES_DB=remnawave_bot
+DATABASE_URL=postgresql://remnawave:$POSTGRES_PASSWORD@remnawave-admin-db:5432/remnawave_bot
+WEB_CORS_ORIGINS=https://$ADMIN_DOMAIN
+TELEGRAM_BOT_USERNAME=$BOT_USERNAME
+WEB_BACKEND_PORT=9091
+WEB_FRONTEND_PORT=13000
+EOF
+
+    docker network create remnawave-network 2>/dev/null || true
+    docker compose up -d
+
+    if [[ "$server_location" == "1" ]]; then
+        ADMIN_BLOCK="https://$ADMIN_DOMAIN {
+    handle {
+        reverse_proxy web-frontend:80
+    }
+    handle /api/* {
+        reverse_proxy web-backend:9091 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    handle /ws/* {
+        reverse_proxy web-backend:9091
+    }
+}"
+        add_caddy_block "$ADMIN_DOMAIN" "$ADMIN_BLOCK"
+        
+        cd /opt/remnawave/caddy
+        docker compose down && docker compose up -d
+    fi
+
+    echo -e "${GREEN}✅ Remnawave Admin Web + Bot установлен!${NC}"
+    echo -e "🌐 Веб-панель: https://$ADMIN_DOMAIN\n"
+    read -p "Нажмите Enter для возврата в меню..."
+}
+
+# ============================================
+# ОПЦИЯ 4: CLOUDFLARE WARP
 # ============================================
 install_warp() {
     show_logo
@@ -636,7 +716,7 @@ uninstall_warp() {
 }
 
 # ============================================
-# ОПЦИЯ 4: БЭКАПЫ
+# ОПЦИЯ 5: БЭКАПЫ
 # ============================================
 run_backup() {
     show_logo
@@ -657,7 +737,7 @@ run_backup() {
 }
 
 # ============================================
-# ОПЦИЯ 5: ЛОГИ
+# ОПЦИЯ 6: ЛОГИ
 # ============================================
 show_logs_menu() {
     while true; do
@@ -760,9 +840,10 @@ while true; do
     echo -e "${BOLD}Выберите раздел:${NC}"
     echo -e "  ${CYAN}1)${NC} 🚀 Remnawave"
     echo -e "  ${CYAN}2)${NC} 💰 Bedolaga (Bot + MiniAPP)"
-    echo -e "  ${CYAN}3)${NC} 🌐 Cloudflare WARP"
-    echo -e "  ${CYAN}4)${NC} 💾 Бэкапы"
-    echo -e "  ${CYAN}5)${NC} 📋 Логи"
+    echo -e "  ${CYAN}3)${NC} 🤖 Remnawave Admin Web + Bot"
+    echo -e "  ${CYAN}4)${NC} 🌐 Cloudflare WARP"
+    echo -e "  ${CYAN}5)${NC} 💾 Бэкапы"
+    echo -e "  ${CYAN}6)${NC} 📋 Логи"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  ${CYAN}0)${NC} 🚪 Выход"
     read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" main_choice
@@ -770,9 +851,10 @@ while true; do
     case $main_choice in
         1) show_remnawave_menu ;;
         2) show_bedolaga_menu ;;
-        3) show_warp_menu ;;
-        4) run_backup ;;
-        5) show_logs_menu ;;
+        3) install_admin_bot ;;
+        4) show_warp_menu ;;
+        5) run_backup ;;
+        6) show_logs_menu ;;
         0) echo -e "${GREEN}👋 До свидания!${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
     esac
