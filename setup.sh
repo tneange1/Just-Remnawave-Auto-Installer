@@ -55,6 +55,69 @@ install_docker() {
 }
 
 # ============================================
+# СИСТЕМА БЛОКОВ CADDY
+# ============================================
+
+# Инициализация системы блоков
+init_caddy_blocks() {
+    mkdir -p /opt/remnawave/caddy/blocks
+}
+
+# Добавление/обновление блока Caddy для домена
+# Параметры: $1 - домен, $2 - содержимое блока
+add_caddy_block() {
+    local domain="$1"
+    local block_content="$2"
+    local blocks_dir="/opt/remnawave/caddy/blocks"
+    
+    init_caddy_blocks
+    
+    # Сохраняем блок в отдельный файл
+    echo "$block_content" > "$blocks_dir/$domain"
+    echo -e "${GREEN}✅ Блок для $domain сохранён.${NC}"
+    
+    # Пересобираем Caddyfile
+    rebuild_caddyfile
+}
+
+# Удаление блока Caddy для домена
+remove_caddy_block() {
+    local domain="$1"
+    local blocks_dir="/opt/remnawave/caddy/blocks"
+    
+    if [ -f "$blocks_dir/$domain" ]; then
+        rm -f "$blocks_dir/$domain"
+        echo -e "${GREEN}✅ Блок для $domain удалён.${NC}"
+        rebuild_caddyfile
+    else
+        echo -e "${YELLOW}⚠️  Блок для $domain не найден.${NC}"
+    fi
+}
+
+# Пересборка Caddyfile из всех блоков
+rebuild_caddyfile() {
+    local blocks_dir="/opt/remnawave/caddy/blocks"
+    local caddyfile="/opt/remnawave/caddy/Caddyfile"
+    
+    # Очищаем Caddyfile
+    echo "# Remnawave Caddy Configuration" > "$caddyfile"
+    echo "# Auto-generated - do not edit manually" >> "$caddyfile"
+    echo "" >> "$caddyfile"
+    
+    # Добавляем все блоки
+    if [ -d "$blocks_dir" ]; then
+        for block_file in "$blocks_dir"/*; do
+            if [ -f "$block_file" ]; then
+                cat "$block_file" >> "$caddyfile"
+                echo "" >> "$caddyfile"
+            fi
+        done
+    fi
+    
+    echo -e "${GREEN}✅ Caddyfile пересобран.${NC}"
+}
+
+# ============================================
 # ОПЦИЯ 1.1: УСТАНОВКА ПАНЕЛИ + ПОДПИСКИ
 # ============================================
 install_panel() {
@@ -98,15 +161,13 @@ install_panel() {
 
     echo -e "\n${YELLOW}🔧 Шаг 5. Настраиваем Caddy (HTTPS)...${NC}"
     mkdir -p /opt/remnawave/caddy && cd /opt/remnawave/caddy
+    init_caddy_blocks
 
-    cat > Caddyfile <<EOF
-# ==================
-# Web panel
-# ==================
-https://$PANEL_DOMAIN {
-        reverse_proxy * http://remnawave:3000
-}
-EOF
+    # Создаём блок для панели
+    PANEL_BLOCK="https://$PANEL_DOMAIN {
+    reverse_proxy * http://remnawave:3000
+}"
+    add_caddy_block "$PANEL_DOMAIN" "$PANEL_BLOCK"
 
     cat > docker-compose.yml <<EOF
 services:
@@ -179,22 +240,16 @@ EOF
         echo -e "${GREEN}✅ Страница подписки запущена.${NC}"
 
         echo -e "${YELLOW}🔄 Шаг 7. Добавляем домен подписки в Caddy...${NC}"
-        cd /opt/remnawave/caddy
         
-        if ! grep -q "$SUB_DOMAIN" Caddyfile; then
-            cat >> Caddyfile <<EOF
-
-# ==================
-# Subscription Page
-# ==================
-https://$SUB_DOMAIN {
-        reverse_proxy * http://remnawave-subscription-page:3010
-}
-EOF
-            
-            docker compose down && docker compose up -d
-            echo -e "${GREEN}✅ Caddy обновлён.${NC}"
-        fi
+        # Создаём блок для подписки
+        SUB_BLOCK="https://$SUB_DOMAIN {
+    reverse_proxy * http://remnawave-subscription-page:3010
+}"
+        add_caddy_block "$SUB_DOMAIN" "$SUB_BLOCK"
+        
+        cd /opt/remnawave/caddy
+        docker compose down && docker compose up -d
+        echo -e "${GREEN}✅ Caddy обновлён.${NC}"
     fi
 
     echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
@@ -493,14 +548,8 @@ EOF
     docker compose up -d
 
     if [[ "$SAME_SERVER" == true ]]; then
-        cd /opt/remnawave/caddy
-        if ! grep -q "$ADMIN_DOMAIN" Caddyfile; then
-            cat >> Caddyfile <<EOF
-
-# ======================
-# Remnawave Admin + Bot
-# =====================
-https://$ADMIN_DOMAIN {
+        # Создаём блок для RWA
+        RWA_BLOCK="https://$ADMIN_DOMAIN {
     handle {
         reverse_proxy web-frontend:80
     }
@@ -514,10 +563,11 @@ https://$ADMIN_DOMAIN {
     handle /ws/* {
         reverse_proxy web-backend:9091
     }
-}
-EOF
-            docker compose down && docker compose up -d
-        fi
+}"
+        add_caddy_block "$ADMIN_DOMAIN" "$RWA_BLOCK"
+        
+        cd /opt/remnawave/caddy
+        docker compose down && docker compose up -d
     fi
 
     echo -e "${GREEN}✅ Remnawave Admin установлен!${NC}"
@@ -543,6 +593,55 @@ update_rwa() {
     
     echo -e "${GREEN}✅ Обновление завершено!${NC}\n"
     read -p "Нажмите Enter..."
+}
+
+# ============================================
+# ОПЦИЯ 3.2: УДАЛЕНИЕ REMNAWAVE ADMIN
+# ============================================
+uninstall_rwa() {
+    show_logo
+    echo -e "${BLUE}${BOLD}🗑️  Удаление Remnawave Admin Web + Bot${NC}\n"
+
+    if [ ! -d "/opt/remnawave-admin" ]; then
+        echo -e "${RED}❌ Папка /opt/remnawave-admin не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+
+    echo -e "${YELLOW}⚠️  Вы собираетесь удалить Remnawave Admin Web + Bot${NC}"
+    echo -e "${YELLOW}   Все данные будут удалены без возможности восстановления!${NC}\n"
+    read -p "Подтвердите удаление (yes/no): " confirm
+    
+    if [[ "$confirm" != "yes" ]]; then
+        echo -e "${GREEN}❌ Удаление отменено.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+
+    echo -e "\n${YELLOW}🛑 Останавливаем контейнеры...${NC}"
+    cd /opt/remnawave-admin
+    docker compose down
+    echo -e "${GREEN}✅ Контейнеры остановлены.${NC}"
+
+    # Получаем домен из .env для удаления блока Caddy
+    if [ -f ".env" ]; then
+        ADMIN_DOMAIN=$(grep "WEB_CORS_ORIGINS" .env | cut -d'=' -f2 | sed 's|https://||')
+        if [ -n "$ADMIN_DOMAIN" ]; then
+            echo -e "${YELLOW}🗑️  Удаляем блок Caddy для $ADMIN_DOMAIN...${NC}"
+            remove_caddy_block "$ADMIN_DOMAIN"
+            cd /opt/remnawave/caddy
+            docker compose down && docker compose up -d
+        fi
+    fi
+
+    echo -e "${YELLOW}🗑️  Удаляем директорию /opt/remnawave-admin...${NC}"
+    rm -rf /opt/remnawave-admin
+    echo -e "${GREEN}✅ Директория удалена.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║   ✅ REMNAWAVE ADMIN УДАЛЁН! 🎉                   ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
 # ============================================
@@ -623,14 +722,8 @@ EOF
 
     # Настройка Caddy
     if [[ "$server_location" == "1" ]]; then
-        cd /opt/remnawave/caddy
-        if ! grep -q "$BEDOLAGA_DOMAIN" Caddyfile; then
-            cat >> Caddyfile <<EOF
-
-# ===============================
-# Bedolaga Bot
-# ===============================
-https://$BEDOLAGA_DOMAIN {
+        # Создаём блок для Bedolaga
+        BEDOLAGA_BLOCK="https://$BEDOLAGA_DOMAIN {
     encode gzip zstd
     handle {
         reverse_proxy remnawave_bot:8080 {
@@ -641,10 +734,11 @@ https://$BEDOLAGA_DOMAIN {
             }
         }
     }
-}
-EOF
-            docker compose down && docker compose up -d
-        fi
+}"
+        add_caddy_block "$BEDOLAGA_DOMAIN" "$BEDOLAGA_BLOCK"
+        
+        cd /opt/remnawave/caddy
+        docker compose down && docker compose up -d
     fi
 
     echo -e "${GREEN}✅ Bedolaga Bot установлен!${NC}"
@@ -718,15 +812,19 @@ EOF
     docker compose down
     docker compose up -d
 
-    # Добавляем в Caddy
-    cd /opt/remnawave/caddy
-    if ! grep -q "$CABINET_DOMAIN" Caddyfile; then
-        cat >> Caddyfile <<EOF
+    # Подключаем caddy к сети бота для доступа к cabinet_frontend
+    echo -e "${YELLOW}🔗 Подключаем Caddy к сети Bedolaga...${NC}"
+    BOT_NETWORK=$(docker inspect remnawave_bot -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | tr -d ' ')
+    if [ -n "$BOT_NETWORK" ]; then
+        docker network connect "$BOT_NETWORK" caddy 2>/dev/null || true
+        echo -e "${GREEN}✅ Caddy подключён к сети $BOT_NETWORK${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Не удалось определить сеть бота. Попробуйте вручную:${NC}"
+        echo -e "${CYAN}   docker network connect <network_name> caddy${NC}"
+    fi
 
-# =============================
-# Bedolaga Cabinet
-# ============================
-https://$CABINET_DOMAIN {
+    # Создаём блок для Cabinet
+    CABINET_BLOCK="https://$CABINET_DOMAIN {
     encode gzip zstd
     handle /api/* {
         uri strip_prefix /api
@@ -735,10 +833,11 @@ https://$CABINET_DOMAIN {
     handle {
         reverse_proxy cabinet_frontend:80
     }
-}
-EOF
-        docker compose down && docker compose up -d
-    fi
+}"
+    add_caddy_block "$CABINET_DOMAIN" "$CABINET_BLOCK"
+    
+    cd /opt/remnawave/caddy
+    docker compose down && docker compose up -d
 
     echo -e "${GREEN}✅ Cabinet установлен!${NC}"
     echo -e "🗄️  Cabinet: https://$CABINET_DOMAIN\n"
@@ -773,38 +872,88 @@ update_cabinet() {
 }
 
 # ============================================
-# ОПЦИЯ 5: БЭКАПЫ
+# ОПЦИЯ 4.3: УДАЛЕНИЕ BEDOLAGA
 # ============================================
-create_backup() {
+uninstall_bedolaga() {
     show_logo
-    echo -e "${BLUE}${BOLD}💾 Создание бэкапа${NC}\n"
+    echo -e "${BLUE}${BOLD}🗑️  Удаление Bedolaga Bot + Cabinet${NC}\n"
 
-    if [ ! -f "/usr/local/bin/rw-backup" ]; then
-        curl -Ls https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh -o /tmp/backup-restore.sh
-        chmod +x /tmp/backup-restore.sh
-        bash /tmp/backup-restore.sh backup
-    else
-        rw-backup backup
+    if [ ! -d "/opt/bedolaga-bot" ]; then
+        echo -e "${RED}❌ Папка /opt/bedolaga-bot не найдена.${NC}"
+        read -p "Нажмите Enter..."
+        return
     fi
 
-    echo -e "\n${GREEN}✅ Бэкап создан!${NC}\n"
-    read -p "Нажмите Enter..."
+    echo -e "${YELLOW}⚠️  Вы собираетесь удалить Bedolaga Bot и Cabinet${NC}"
+    echo -e "${YELLOW}   Все данные будут удалены без возможности восстановления!${NC}\n"
+    read -p "Подтвердите удаление (yes/no): " confirm
+    
+    if [[ "$confirm" != "yes" ]]; then
+        echo -e "${GREEN}❌ Удаление отменено.${NC}"
+        read -p "Нажмите Enter..."
+        return
+    fi
+
+    echo -e "\n${YELLOW}🛑 Останавливаем контейнеры...${NC}"
+    cd /opt/bedolaga-bot
+    docker compose down
+    echo -e "${GREEN}✅ Контейнеры остановлены.${NC}"
+
+    # Получаем домены из .env для удаления блоков Caddy
+    if [ -f ".env" ]; then
+        BEDOLAGA_DOMAIN=$(grep "WEBHOOK_URL" .env | cut -d'=' -f2 | sed 's|https://||')
+        CABINET_DOMAIN=$(grep "CABINET_URL" .env | cut -d'=' -f2 | sed 's|https://||')
+        
+        if [ -n "$BEDOLAGA_DOMAIN" ]; then
+            echo -e "${YELLOW}🗑️  Удаляем блок Caddy для $BEDOLAGA_DOMAIN...${NC}"
+            remove_caddy_block "$BEDOLAGA_DOMAIN"
+        fi
+        
+        if [ -n "$CABINET_DOMAIN" ]; then
+            echo -e "${YELLOW}🗑️  Удаляем блок Caddy для $CABINET_DOMAIN...${NC}"
+            remove_caddy_block "$CABINET_DOMAIN"
+        fi
+        
+        if [ -n "$BEDOLAGA_DOMAIN" ] || [ -n "$CABINET_DOMAIN" ]; then
+            cd /opt/remnawave/caddy
+            docker compose down && docker compose up -d
+        fi
+    fi
+
+    echo -e "${YELLOW}🗑️  Удаляем директорию /opt/bedolaga-bot...${NC}"
+    rm -rf /opt/bedolaga-bot
+    echo -e "${GREEN}✅ Директория удалена.${NC}"
+
+    echo -e "${YELLOW}🗑️  Удаляем файлы Cabinet...${NC}"
+    rm -rf /srv/cabinet
+    echo -e "${GREEN}✅ Файлы Cabinet удалены.${NC}"
+
+    echo -e "\n${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}${BOLD}║   ✅ BEDOLAGA BOT УДАЛЁН! 🎉                      ║${NC}"
+    echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
-restore_backup() {
+# ============================================
+# ОПЦИЯ 5: БЭКАПЫ
+# ============================================
+run_backup() {
     show_logo
-    echo -e "${BLUE}${BOLD}💾 Восстановление из бэкапа${NC}\n"
+    echo -e "${BLUE}${BOLD}💾 Запуск скрипта бэкапов${NC}\n"
 
-    if [ ! -f "/usr/local/bin/rw-backup" ]; then
+    # Скачиваем скрипт если его нет
+    if [ ! -f "/tmp/backup-restore.sh" ]; then
+        echo -e "${YELLOW}📥 Скачиваем скрипт бэкапов...${NC}"
         curl -Ls https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh -o /tmp/backup-restore.sh
         chmod +x /tmp/backup-restore.sh
-        bash /tmp/backup-restore.sh restore
-    else
-        rw-backup restore
+        echo -e "${GREEN}✅ Скрипт скачан.${NC}\n"
     fi
 
-    echo -e "\n${GREEN}✅ Восстановление завершено!${NC}\n"
-    read -p "Нажмите Enter..."
+    echo -e "${YELLOW}Запускаем скрипт бэкапов...${NC}\n"
+    bash /tmp/backup-restore.sh
+    
+    echo -e "\n${GREEN}✅ Скрипт бэкапов завершён.${NC}\n"
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
 # ============================================
@@ -854,12 +1003,14 @@ show_admin_bot_menu() {
         echo -e "${BLUE}${BOLD}🤖 Remnawave Admin Web + Bot${NC}\n"
         echo -e "  ${CYAN}1)${NC} 🤖 Установить Admin Web + Bot"
         echo -e "  ${CYAN}2)${NC} 🔄 Обновить Admin Web + Bot"
+        echo -e "  ${CYAN}3)${NC} 🗑️  Удалить Admin Web + Bot"
         echo -e "  ${CYAN}0)${NC} 🔙 Назад"
         read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
 
         case $choice in
             1) install_admin_bot ;;
             2) update_rwa ;;
+            3) uninstall_rwa ;;
             0) break ;;
             *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
         esac
@@ -874,6 +1025,7 @@ show_bedolaga_menu() {
         echo -e "  ${CYAN}2)${NC} 🗄️  Установить Cabinet"
         echo -e "  ${CYAN}3)${NC} 🔄 Обновить Bedolaga Bot"
         echo -e "  ${CYAN}4)${NC} 🔄 Обновить Cabinet"
+        echo -e "  ${CYAN}5)${NC} 🗑️  Удалить Bedolaga Bot + Cabinet"
         echo -e "  ${CYAN}0)${NC} 🔙 Назад"
         read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
 
@@ -882,24 +1034,7 @@ show_bedolaga_menu() {
             2) install_cabinet ;;
             3) update_bedolaga ;;
             4) update_cabinet ;;
-            0) break ;;
-            *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
-        esac
-    done
-}
-
-show_backup_menu() {
-    while true; do
-        show_logo
-        echo -e "${BLUE}${BOLD}💾 Бэкапы${NC}\n"
-        echo -e "  ${CYAN}1)${NC} 💾 Создать бэкап"
-        echo -e "  ${CYAN}2)${NC} 📥 Восстановить из бэкапа"
-        echo -e "  ${CYAN}0)${NC} 🔙 Назад"
-        read -p "$(echo -e ${CYAN}▶${NC} Ваш выбор: )" choice
-
-        case $choice in
-            1) create_backup ;;
-            2) restore_backup ;;
+            5) uninstall_bedolaga ;;
             0) break ;;
             *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
         esac
@@ -928,7 +1063,7 @@ while true; do
         2) show_warp_menu ;;
         3) show_admin_bot_menu ;;
         4) show_bedolaga_menu ;;
-        5) show_backup_menu ;;
+        5) run_backup ;;
         0) echo -e "${GREEN}👋 До свидания!${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Неверный выбор.${NC}"; sleep 2 ;;
     esac
