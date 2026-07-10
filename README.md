@@ -46,11 +46,6 @@
 bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
 ```
 
-Вызывать меню из любой директории командой:
-```bash
-rw-installer
-```
-
 ## 📖 Использование
 
 После запуска скрипта появится меню:
