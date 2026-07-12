@@ -47,7 +47,7 @@ sudo bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-A
 
 ```
   ╔════════════════════════════════════════════════════╗
-  ║    Just Remnawave Auto Installer by tneangel    ║
+  ║    Just Remnawave Auto Installer by tneangel       ║
   ╚════════════════════════════════════════════════════╝
 
 Выберите действие:
