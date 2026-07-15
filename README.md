@@ -38,7 +38,7 @@
 Просто выполни одну команду на сервере:
 
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/tneange1/Just-Remnawave-Auto-Installer/main/setup.sh)
 ```
 
 ## 📖 Использование
